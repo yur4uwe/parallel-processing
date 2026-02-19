@@ -1,0 +1,5 @@
+results/
+aes_ctr
+*.txt
+*.enc
+*.dec
