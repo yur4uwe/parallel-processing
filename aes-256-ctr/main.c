@@ -1,10 +1,11 @@
+#include "consts.h"
+#include "arg_parsing.h"
+#include "aes-utils.h"
+#include "aes.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "consts.h"
-#include "arg_parsing.h"
-#include "aes.h"
 
 int main(int argc, char *argv[]) {
     int ec = SUCCESS;
@@ -63,17 +64,7 @@ int main(int argc, char *argv[]) {
         goto cleanup_out;
     }
 
-    int aes_ec = FAILURE;
-#ifdef _OPENMP
-    // printf("This is parallel aes\n");
-    // printf("[DEBUG] OpenMP is enabled (_OPENMP = %d)\n", _OPENMP);
-    aes_ec = aes_ctr_parallel(parsed_args->key, nonce, in_fp, out_fp);
-#else
-    // printf("This is sequential aes\n");
-    // printf("[DEBUG] OpenMP is NOT available\n");
-    aes_ec = aes_ctr_process(in_fp, out_fp, parsed_args->key, nonce);
-#endif
-
+    int aes_ec = aes_ctr_process(in_fp, out_fp, parsed_args->key, nonce);
     if (aes_ec != SUCCESS) {
         fprintf(stderr, "Failed to process file\n");
         ec = FAILURE;
