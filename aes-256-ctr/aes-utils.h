@@ -24,12 +24,17 @@
 #define COLOR_CYAN    "\033[0;36m"
 #define COLOR_YELLOW  "\033[0;33m"
 
-// Parallel Debug macro - automatically includes colors, thread number, and flush
+#define ENABLE_PDEBUG
+
+#ifdef ENABLE_PDEBUG
 #define PDEBUG(fmt, ...) do { \
     int tid = GET_THREAD_NUM(); \
     fprintf(stderr, "%s[PARALLEL T%d] " fmt "%s\n", get_thread_color(tid), tid, ##__VA_ARGS__, COLOR_RESET); \
     fflush(stderr); \
 } while(0)
+#else
+#define PDEBUG(fmt, ...) ((void)0)
+#endif
 
 const char* get_thread_color(int tid);
 
@@ -38,3 +43,7 @@ int random_nonce(uint8_t* nonce, size_t size);
 void key_schedule(const uint8_t* key, uint8_t* round_keys);
 
 void aes_block_encrypt(uint8_t state[AES_BLOCK_SIZE], const uint8_t* round_keys);
+
+uint32_t ceil_div(size_t numerator, size_t denominator);
+
+uint32_t min_u32(uint32_t a, uint32_t b);

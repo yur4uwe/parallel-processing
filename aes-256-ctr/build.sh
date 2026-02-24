@@ -9,13 +9,16 @@ NC='\033[0m'
 
 mkdir -p bin
 
-MODES=("serial", "parallel-for", "parallel-task")
+MODES=("serial" "parallel" "parallel-for" "parallel-task")
 
 DEFAULT_MODE="serial"
 
 SELECTED_MODE=$DEFAULT_MODE
 
 is_valid_mode() {
+    if [ "$1" == "all" ]; then
+        return 0
+    fi
     for mode in "${MODES[@]}"; do
         if [ "$mode" == "$1" ]; then
             return 0
@@ -34,24 +37,33 @@ else
     exit 1
 fi
 
-BINARY=bin/aes-ctr-$SELECTED_MODE
-
 echo "=== Compiling AES-CTR ==="
-FLAGS=" -Wall -Wextra -Wformat=2 -Wsign-conversion \
+BASE_FLAGS=" -Wall -Wextra -Wformat=2 -Wsign-conversion \
     -O2 -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
     -lssl -lcrypto"
 
-if [[ "$SELECTED_MODE" == "parallel-for" || "$SELECTED_MODE" == "parallel-task" ]]; then
-    FLAGS="$FLAGS -fopenmp"
+# Determine which modes to build
+if [ "$SELECTED_MODE" == "all" ]; then
+    MODES_TO_BUILD=("${MODES[@]}")
+else
+    MODES_TO_BUILD=("$SELECTED_MODE")
 fi
 
-gcc aes-ctr-$SELECTED_MODE.c aes-utils.c main.c arg_parsing.c -o $BINARY $FLAGS
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to compile!${NC}"
-    exit 1
-fi
+for mode in "${MODES_TO_BUILD[@]}"; do
+    FLAGS="$BASE_FLAGS"
+    if [[ "$mode" == "parallel" || "$mode" == "parallel-for" || "$mode" == "parallel-task" ]]; then
+        FLAGS="$FLAGS -fopenmp"
+    fi
+    gcc aes-ctr-$mode.c aes-utils.c main.c arg_parsing.c -o bin/aes-ctr-$mode $FLAGS
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Failed to compile $mode!${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Compiled $mode successfully${NC}"
+done
+
 echo -e "${GREEN}Compiled successfully${NC}"
-if [[ "$SELECTED_MODE" == "parallel-for" || "$SELECTED_MODE" == "parallel-task" ]]; then
+if [[ "$SELECTED_MODE" == "parallel" || "$SELECTED_MODE" == "parallel-for" || "$SELECTED_MODE" == "parallel-task" ]]; then
     echo "Note: To use multiple threads, set OMP_NUM_THREADS environment variable:"
     echo "  export OMP_NUM_THREADS=4   # or your CPU core count"
     echo "Then run: ./aes_ctr"

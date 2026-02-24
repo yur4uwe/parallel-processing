@@ -18,13 +18,6 @@ typedef struct {
     uint32_t blocks_encrypted;              // Count of encrypted blocks
 } OutputBatch;
 
-static uint32_t ceil_div(size_t numerator, size_t denominator) {
-    return (uint32_t)((numerator + denominator - 1) / denominator);
-}
-
-static uint32_t min_u32(uint32_t a, uint32_t b) {
-    return a < b ? a : b;
-}
 
 int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], const uint8_t nonce[AES_NONCE_SIZE]) {
     fprintf(stderr, "[TASK PIPELINE] Starting pipelined task-based AES-CTR encryption\n");

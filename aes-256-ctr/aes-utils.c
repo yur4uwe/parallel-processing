@@ -158,3 +158,11 @@ void aes_block_encrypt(uint8_t state[AES_BLOCK_SIZE], const uint8_t* round_keys)
         }
     }
 }
+
+uint32_t ceil_div(size_t numerator, size_t denominator) {
+    return (uint32_t)((numerator + denominator - 1) / denominator);
+}
+
+uint32_t min_u32(uint32_t a, uint32_t b) {
+    return a < b ? a : b;
+}
