@@ -1,4 +1,6 @@
 results/
+test_artifacts/
+perf_data/
 aes_ctr
 *.txt
 *.enc

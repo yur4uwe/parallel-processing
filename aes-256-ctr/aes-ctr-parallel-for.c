@@ -14,16 +14,31 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         return FAILURE;
     }
 
+    // Get current file position - main.c has already read/written the nonce
+    long current_pos = ftell(in_fp);
+    if (current_pos < 0) {
+        fprintf(stderr, "Failed to get file position\n");
+        return FAILURE;
+    }
+
     struct stat st;
     if (fstat(fileno(in_fp), &st) != 0) {
         fprintf(stderr, "Failed to get file size\n");
         return FAILURE;
     }
 
+    // Calculate actual data size (excluding nonce that was already read)
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wsign-conversion"
-    uint32_t file_size = st.st_size;
+    size_t data_size = st.st_size - current_pos;
     #pragma GCC diagnostic pop
+
+    // Empty files are valid - just return success with no processing
+    if (data_size == 0) {
+        fprintf(stderr, "[PARALLEL] Empty file, nothing to process\n");
+        return SUCCESS;
+    }
+
     int ec = SUCCESS;
 
     uint8_t* per_round_keys = (uint8_t*)malloc(AES_ROUND_KEY_SIZE);
@@ -42,7 +57,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         baseline_state[i] = nonce[i];
     }
 
-    uint8_t* buffer = (uint8_t*)malloc((size_t)file_size);
+    uint8_t* buffer = (uint8_t*)malloc(data_size);
     if (!buffer) {
         fprintf(stderr, "Input buffer allocation failed\n");
         memset(per_round_keys, 0, AES_ROUND_KEY_SIZE);
@@ -50,8 +65,8 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         return FAILURE;
     }
 
-    size_t read_bytes = fread(buffer, sizeof(uint8_t), (size_t)file_size, in_fp);
-    if (read_bytes == 0) {
+    size_t read_bytes = fread(buffer, sizeof(uint8_t), data_size, in_fp);
+    if (read_bytes != data_size) {
         fprintf(stderr, "Error reading input file\n");
         free(buffer);
         memset(per_round_keys, 0, AES_ROUND_KEY_SIZE);

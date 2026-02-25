@@ -46,21 +46,23 @@ make_input() {
 
 log() { printf "%s\n" "$*"; }
 
-log "=== Building serial version ==="
-./build.sh >/dev/null 2>&1
+log "=== Building all versions ==="
+./build.sh all >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    log "FAIL: build serial"
+    log "FAIL: build all"
     exit 1
 fi
-cp aes_ctr aes_ctr_serial
 
-log "=== Building parallel version ==="
-./build.sh parallel >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    log "FAIL: build parallel"
-    exit 1
-fi
-cp aes_ctr aes_ctr_parallel
+# Verify all binaries exist
+VARIANTS="serial parallel parallel-for parallel-task"
+for variant in $VARIANTS; do
+    if [ ! -f "bin/aes-ctr-${variant}" ]; then
+        log "FAIL: missing binary for $variant"
+        exit 1
+    fi
+done
+
+log "All binaries built successfully"
 
 # Collect results in associative arrays
 declare -A results
@@ -80,7 +82,7 @@ for kb in $SIZES_KB; do
     for run in $(seq 1 "$RUNS"); do
         out_file="$DATA_DIR/out_serial_${kb}kb_run${run}.enc"
         start=$(now_ns)
-        ./aes_ctr_serial "$input_file" "$out_file" -e -k "$KEY" >/dev/null 2>&1
+        ./bin/aes-ctr-serial "$input_file" "$out_file" -e -k "$KEY" >/dev/null 2>&1
         end=$(now_ns)
         elapsed=$((end - start))
 
@@ -88,17 +90,19 @@ for kb in $SIZES_KB; do
         results["${key}_${kb}"]="$elapsed"
     done
 
-    # Parallel runs
-    for t in $THREADS; do
-        for run in $(seq 1 "$RUNS"); do
-            out_file="$DATA_DIR/out_parallel_${kb}kb_t${t}_run${run}.enc"
-            start=$(now_ns)
-            OMP_NUM_THREADS="$t" ./aes_ctr_parallel "$input_file" "$out_file" -e -k "$KEY" >/dev/null 2>&1
-            end=$(now_ns)
-            elapsed=$((end - start))
+    # Parallel runs (for parallel, parallel-for, parallel-task variants)
+    for variant in parallel parallel-for parallel-task; do
+        for t in $THREADS; do
+            for run in $(seq 1 "$RUNS"); do
+                out_file="$DATA_DIR/out_${variant}_${kb}kb_t${t}_run${run}.enc"
+                start=$(now_ns)
+                OMP_NUM_THREADS="$t" ./bin/aes-ctr-${variant} "$input_file" "$out_file" -e -k "$KEY" >/dev/null 2>&1
+                end=$(now_ns)
+                elapsed=$((end - start))
 
-            key="parallel_${t}_run${run}"
-            results["${key}_${kb}"]="$elapsed"
+                key="${variant}_${t}_run${run}"
+                results["${key}_${kb}"]="$elapsed"
+            done
         done
     done
 
@@ -127,20 +131,23 @@ for run in $(seq 1 "$RUNS"); do
     } >> "$CSV_FILE"
 done
 
-# Write results for parallel (1 variant, multiple threads, multiple runs)
-for t in $THREADS; do
-    for run in $(seq 1 "$RUNS"); do
-        {
-            printf "%s,parallel,%s" "$TS" "$t"
-            for kb in $SIZES_KB; do
-                ns="${results[parallel_${t}_run${run}_${kb}]}"
-                ms=$((ns / 1000000))
-                printf ",%s" "$ms"
-            done
-            printf "\n"
-        } >> "$CSV_FILE"
+# Write results for all parallel variants (multiple variants, multiple threads, multiple runs)
+for variant in parallel parallel-for parallel-task; do
+    for t in $THREADS; do
+        for run in $(seq 1 "$RUNS"); do
+            {
+                printf "%s,%s,%s" "$TS" "$variant" "$t"
+                for kb in $SIZES_KB; do
+                    ns="${results[${variant}_${t}_run${run}_${kb}]}"
+                    ms=$((ns / 1000000))
+                    printf ",%s" "$ms"
+                done
+                printf "\n"
+            } >> "$CSV_FILE"
+        done
     done
 done
 
 log "Results written to: $CSV_FILE"
 ./cleanup.sh
+rm -rf perf_data

@@ -69,21 +69,21 @@ run_cmp_mismatch() {
     fi
 }
 
-log "=== Building serial version ==="
-./build.sh >/dev/null 2>&1
+log "=== Building all versions ==="
+./build.sh all >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    log "FAIL: build serial"
+    log "FAIL: build all"
     exit 1
 fi
-cp aes_ctr aes_ctr_serial
 
-log "=== Building parallel version ==="
-./build.sh parallel >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    log "FAIL: build parallel"
-    exit 1
-fi
-cp aes_ctr aes_ctr_parallel
+# Copy binaries with descriptive names for testing
+VARIANTS="serial parallel parallel-for parallel-task"
+for variant in $VARIANTS; do
+    if [ ! -f "bin/aes-ctr-${variant}" ]; then
+        log "FAIL: missing binary for $variant"
+        exit 1
+    fi
+done
 
 KEY_OK="correct-key"
 KEY_BAD="wrong-key"
@@ -102,45 +102,58 @@ DD_BS=1024
 (dd if=/dev/urandom of="$INPUT_MED" bs=$DD_BS count=$DD_COUNT 2>/dev/null)
 
 log "=== Negative/argument tests ==="
-run_cmd "help flag (serial)" 0 ./aes_ctr_serial -h
-run_cmd "missing key" 1 ./aes_ctr_serial "$INPUT_SMALL" "$OUT_DIR/out.enc" -e
-run_cmd "empty key" 1 ./aes_ctr_serial "$INPUT_SMALL" "$OUT_DIR/out.enc" -e -k ""
-run_cmd "missing output file" 1 ./aes_ctr_serial "$INPUT_SMALL" -e -k "$KEY_OK"
-run_cmd "missing input file" 1 ./aes_ctr_serial "$OUT_DIR/no_such_file" "$OUT_DIR/out.enc" -e -k "$KEY_OK"
+run_cmd "help flag (serial)" 0 ./bin/aes-ctr-serial -h
+run_cmd "missing key" 1 ./bin/aes-ctr-serial "$INPUT_SMALL" "$OUT_DIR/out.enc" -e
+run_cmd "empty key" 1 ./bin/aes-ctr-serial "$INPUT_SMALL" "$OUT_DIR/out.enc" -e -k ""
+run_cmd "missing output file" 1 ./bin/aes-ctr-serial "$INPUT_SMALL" -e -k "$KEY_OK"
+run_cmd "missing input file" 1 ./bin/aes-ctr-serial "$OUT_DIR/no_such_file" "$OUT_DIR/out.enc" -e -k "$KEY_OK"
 
 log "=== Round-trip tests (serial) ==="
-run_cmd "serial encrypt small" 0 ./aes_ctr_serial "$INPUT_SMALL" "$OUT_DIR/small_s.enc" -e -k "$KEY_OK"
-run_cmd "serial decrypt small" 0 ./aes_ctr_serial "$OUT_DIR/small_s.enc" "$OUT_DIR/small_s.dec" -d -k "$KEY_OK"
+run_cmd "serial encrypt small" 0 ./bin/aes-ctr-serial "$INPUT_SMALL" "$OUT_DIR/small_s.enc" -e -k "$KEY_OK"
+run_cmd "serial decrypt small" 0 ./bin/aes-ctr-serial "$OUT_DIR/small_s.enc" "$OUT_DIR/small_s.dec" -d -k "$KEY_OK"
 run_cmp "serial small round-trip" "$INPUT_SMALL" "$OUT_DIR/small_s.dec"
 
-run_cmd "serial encrypt odd" 0 ./aes_ctr_serial "$INPUT_ODD" "$OUT_DIR/odd_s.enc" -e -k "$KEY_OK"
-run_cmd "serial decrypt odd" 0 ./aes_ctr_serial "$OUT_DIR/odd_s.enc" "$OUT_DIR/odd_s.dec" -d -k "$KEY_OK"
+run_cmd "serial encrypt odd" 0 ./bin/aes-ctr-serial "$INPUT_ODD" "$OUT_DIR/odd_s.enc" -e -k "$KEY_OK"
+run_cmd "serial decrypt odd" 0 ./bin/aes-ctr-serial "$OUT_DIR/odd_s.enc" "$OUT_DIR/odd_s.dec" -d -k "$KEY_OK"
 run_cmp "serial odd round-trip" "$INPUT_ODD" "$OUT_DIR/odd_s.dec"
 
-run_cmd "serial encrypt empty" 0 ./aes_ctr_serial "$INPUT_EMPTY" "$OUT_DIR/empty_s.enc" -e -k "$KEY_OK"
-run_cmd "serial decrypt empty" 0 ./aes_ctr_serial "$OUT_DIR/empty_s.enc" "$OUT_DIR/empty_s.dec" -d -k "$KEY_OK"
+run_cmd "serial encrypt empty" 0 ./bin/aes-ctr-serial "$INPUT_EMPTY" "$OUT_DIR/empty_s.enc" -e -k "$KEY_OK"
+run_cmd "serial decrypt empty" 0 ./bin/aes-ctr-serial "$OUT_DIR/empty_s.enc" "$OUT_DIR/empty_s.dec" -d -k "$KEY_OK"
 run_cmp "serial empty round-trip" "$INPUT_EMPTY" "$OUT_DIR/empty_s.dec"
 
-log "=== Round-trip tests (parallel) ==="
-run_cmd "parallel encrypt small" 0 ./aes_ctr_parallel "$INPUT_SMALL" "$OUT_DIR/small_p.enc" -e -k "$KEY_OK"
-run_cmd "parallel decrypt small" 0 ./aes_ctr_parallel "$OUT_DIR/small_p.enc" "$OUT_DIR/small_p.dec" -d -k "$KEY_OK"
-run_cmp "parallel small round-trip" "$INPUT_SMALL" "$OUT_DIR/small_p.dec"
+log "=== Round-trip tests (all parallel variants) ==="
+for variant in parallel parallel-for parallel-task; do
+    log "--- Testing $variant ---"
+    run_cmd "${variant} encrypt small" 0 ./bin/aes-ctr-${variant} "$INPUT_SMALL" "$OUT_DIR/small_${variant}.enc" -e -k "$KEY_OK"
+    run_cmd "${variant} decrypt small" 0 ./bin/aes-ctr-${variant} "$OUT_DIR/small_${variant}.enc" "$OUT_DIR/small_${variant}.dec" -d -k "$KEY_OK"
+    run_cmp "${variant} small round-trip" "$INPUT_SMALL" "$OUT_DIR/small_${variant}.dec"
 
-run_cmd "parallel encrypt medium" 0 ./aes_ctr_parallel "$INPUT_MED" "$OUT_DIR/med_p.enc" -e -k "$KEY_OK"
-run_cmd "parallel decrypt medium" 0 ./aes_ctr_parallel "$OUT_DIR/med_p.enc" "$OUT_DIR/med_p.dec" -d -k "$KEY_OK"
-run_cmp "parallel medium round-trip" "$INPUT_MED" "$OUT_DIR/med_p.dec"
+    run_cmd "${variant} encrypt medium" 0 ./bin/aes-ctr-${variant} "$INPUT_MED" "$OUT_DIR/med_${variant}.enc" -e -k "$KEY_OK"
+    run_cmd "${variant} decrypt medium" 0 ./bin/aes-ctr-${variant} "$OUT_DIR/med_${variant}.enc" "$OUT_DIR/med_${variant}.dec" -d -k "$KEY_OK"
+    run_cmp "${variant} medium round-trip" "$INPUT_MED" "$OUT_DIR/med_${variant}.dec"
+
+    run_cmd "${variant} encrypt odd" 0 ./bin/aes-ctr-${variant} "$INPUT_ODD" "$OUT_DIR/odd_${variant}.enc" -e -k "$KEY_OK"
+    run_cmd "${variant} decrypt odd" 0 ./bin/aes-ctr-${variant} "$OUT_DIR/odd_${variant}.enc" "$OUT_DIR/odd_${variant}.dec" -d -k "$KEY_OK"
+    run_cmp "${variant} odd round-trip" "$INPUT_ODD" "$OUT_DIR/odd_${variant}.dec"
+done
 
 log "=== Cross-compat tests ==="
-run_cmd "serial encrypt -> parallel decrypt" 0 ./aes_ctr_serial "$INPUT_MED" "$OUT_DIR/med_s.enc" -e -k "$KEY_OK"
-run_cmd "parallel decrypt serial output" 0 ./aes_ctr_parallel "$OUT_DIR/med_s.enc" "$OUT_DIR/med_s.dec" -d -k "$KEY_OK"
-run_cmp "cross round-trip (s->p)" "$INPUT_MED" "$OUT_DIR/med_s.dec"
+# Serial encrypt, each parallel variant decrypt
+for variant in parallel parallel-for parallel-task; do
+    run_cmd "serial encrypt -> ${variant} decrypt" 0 ./bin/aes-ctr-serial "$INPUT_MED" "$OUT_DIR/med_s_to_${variant}.enc" -e -k "$KEY_OK"
+    run_cmd "${variant} decrypt serial output" 0 ./bin/aes-ctr-${variant} "$OUT_DIR/med_s_to_${variant}.enc" "$OUT_DIR/med_s_to_${variant}.dec" -d -k "$KEY_OK"
+    run_cmp "cross round-trip (s->${variant})" "$INPUT_MED" "$OUT_DIR/med_s_to_${variant}.dec"
+done
 
-run_cmd "parallel encrypt -> serial decrypt" 0 ./aes_ctr_parallel "$INPUT_MED" "$OUT_DIR/med_p2.enc" -e -k "$KEY_OK"
-run_cmd "serial decrypt parallel output" 0 ./aes_ctr_serial "$OUT_DIR/med_p2.enc" "$OUT_DIR/med_p2.dec" -d -k "$KEY_OK"
-run_cmp "cross round-trip (p->s)" "$INPUT_MED" "$OUT_DIR/med_p2.dec"
+# Each parallel variant encrypt, serial decrypt
+for variant in parallel parallel-for parallel-task; do
+    run_cmd "${variant} encrypt -> serial decrypt" 0 ./bin/aes-ctr-${variant} "$INPUT_MED" "$OUT_DIR/med_${variant}_to_s.enc" -e -k "$KEY_OK"
+    run_cmd "serial decrypt ${variant} output" 0 ./bin/aes-ctr-serial "$OUT_DIR/med_${variant}_to_s.enc" "$OUT_DIR/med_${variant}_to_s.dec" -d -k "$KEY_OK"
+    run_cmp "cross round-trip (${variant}->s)" "$INPUT_MED" "$OUT_DIR/med_${variant}_to_s.dec"
+done
 
 log "=== Wrong key check ==="
-run_cmd "decrypt with wrong key" 0 ./aes_ctr_parallel "$OUT_DIR/med_s.enc" "$OUT_DIR/med_wrong.dec" -d -k "$KEY_BAD"
+run_cmd "decrypt with wrong key" 0 ./bin/aes-ctr-parallel "$OUT_DIR/med_s_to_parallel.enc" "$OUT_DIR/med_wrong.dec" -d -k "$KEY_BAD"
 run_cmp_mismatch "wrong key should not match" "$INPUT_MED" "$OUT_DIR/med_wrong.dec"
 
 log ""

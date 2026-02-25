@@ -31,10 +31,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "File size exceeds maximum supported size of ~64GB\n");
         ec = FAILURE;
         goto cleanup_in;
-    } else if (file_size <= 0) {
-        fprintf(stderr, "Input file is empty\n");
-        ec = FAILURE;
-        goto cleanup_in;
     }
 
     FILE* out_fp = fopen(parsed_args->out_file, "wb");

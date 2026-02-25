@@ -40,9 +40,10 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
     size_t data_size = st.st_size - in_offset;
     #pragma GCC diagnostic pop
 
+    // Empty files are valid - just return success with no processing
     if (data_size == 0) {
-        fprintf(stderr, "No data to process\n");
-        return FAILURE;
+        fprintf(stderr, "[PARALLEL] Empty file, nothing to process\n");
+        return SUCCESS;
     }
 
     int ec = SUCCESS;
