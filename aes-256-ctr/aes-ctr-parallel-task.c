@@ -45,7 +45,6 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
     #pragma omp parallel shared(per_round_keys, baseline_state, ec, global_block_counter)
     #pragma omp single
     {
-        // Batch size: number of chunks to process in each batch
         const uint32_t CHUNKS_PER_BATCH = 16;
         const uint32_t CHUNK_SIZE_BLOCKS = BUFFER_SIZE;
         const uint32_t CHUNK_SIZE_BYTES = CHUNK_SIZE_BLOCKS * AES_BLOCK_SIZE;
@@ -68,7 +67,6 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
                 }
 
                 size_t read_bytes = fread(read_buffer, 1, CHUNK_SIZE_BYTES, in_fp);
-                
                 if (read_bytes == 0) {
                     free(read_buffer);
                     break;
@@ -94,7 +92,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
             // ===== PHASE 2: ENCRYPT IN PARALLEL =====
             // Create one task per chunk - tasks execute in parallel on worker threads
             for (uint32_t i = 0; i < chunks_read; i++) {
-                Chunk* c = &batch[i];  // Pointer to stack-allocated chunk
+                Chunk* c = &batch[i];
 
                 #pragma omp task firstprivate(c) shared(per_round_keys, baseline_state, ec)
                 {
@@ -121,7 +119,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
                             // XOR with plaintext
                             size_t offset = j * AES_BLOCK_SIZE;
                             size_t bytes_to_xor = min_u32(c->size - offset, AES_BLOCK_SIZE);
-                            
+
                             for (size_t k = 0; k < bytes_to_xor; k++) {
                                 c->data[offset + k] ^= state[k];
                             }
@@ -144,7 +142,6 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
             if (ec == SUCCESS) {
                 for (uint32_t i = 0; i < chunks_read; i++) {
                     size_t written = fwrite(batch[i].data, 1, batch[i].size, out_fp);
-                    
                     if (written != batch[i].size) {
                         fprintf(stderr, "[TASK] Write failed for chunk %u\n", i);
                         ec = FAILURE;

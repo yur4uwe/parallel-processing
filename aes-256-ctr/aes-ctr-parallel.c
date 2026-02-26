@@ -40,7 +40,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
     size_t data_size = st.st_size - in_offset;
     #pragma GCC diagnostic pop
 
-    // Empty files are valid - just return success with no processing
+    // Empty files are valid
     if (data_size == 0) {
         fprintf(stderr, "[PARALLEL] Empty file, nothing to process\n");
         return SUCCESS;
@@ -66,7 +66,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
     fflush(stderr);
 
     uint32_t total_blocks = ceil_div(data_size, AES_BLOCK_SIZE);
-    uint8_t num_threads = 4; // omp_get_max_threads();
+    uint8_t num_threads = omp_get_max_threads();
     uint32_t blocks_per_thread = ceil_div(total_blocks, num_threads);
 
     int in_fd = fileno(in_fp);
