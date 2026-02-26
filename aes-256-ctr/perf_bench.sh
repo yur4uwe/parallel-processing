@@ -23,8 +23,7 @@ RUNS="${RUNS:-1}"
 KEY="${KEY:-bench-key}"
 
 now_ns() {
-    local ns
-    ns=$(date +%s%N 2>/dev/null)
+    local ns=$(date +%s%N 2>/dev/null)
     if [ -n "$ns" ] && [ "$ns" != "%N" ]; then
         printf "%s" "$ns"
         return

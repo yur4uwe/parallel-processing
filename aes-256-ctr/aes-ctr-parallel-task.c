@@ -3,16 +3,15 @@
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-typedef struct {
-    uint8_t* data;
-    size_t size;
-    uint32_t block_start;
-    uint32_t block_count;
-} Chunk;
+#define PIPELINE_DEPTH 8
+#define CHUNK_SIZE_BLOCKS 1024
+#define CHUNK_SIZE_BYTES (CHUNK_SIZE_BLOCKS * AES_BLOCK_SIZE)
 
 int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], const uint8_t nonce[AES_NONCE_SIZE]) {
-    fprintf(stderr, "[TASK PIPELINE] Starting pipelined task-based AES-CTR encryption\n");
+    fprintf(stderr, "[PIPELINED I/O] Starting pread/pwrite task-based AES-CTR encryption\n");
 
     if (!key || !nonce) {
         fprintf(stderr, "Invalid key or nonce\n");
@@ -27,9 +26,8 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         return FAILURE;
     }
 
-    fprintf(stderr, "[TASK PIPELINE] Generating key schedule\n");
+    fprintf(stderr, "[PIPELINED I/O] Generating key schedule\n");
     key_schedule(key, per_round_keys);
-    fprintf(stderr, "[TASK PIPELINE] Key schedule complete\n");
 
     uint8_t baseline_state[AES_BLOCK_SIZE];
     memset(baseline_state, 0, AES_BLOCK_SIZE);
@@ -37,137 +35,191 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         baseline_state[i] = nonce[i];
     }
 
-    fprintf(stderr, "[TASK PIPELINE] Entering parallel region with task-based pipeline\n");
+    int in_fd = fileno(in_fp);
+    int out_fd = fileno(out_fp);
+
+    off_t in_offset = ftell(in_fp);
+    off_t out_offset = ftell(out_fp);
+
+    struct stat in_stat;
+    if (fstat(in_fd, &in_stat) != 0) {
+        perror("fstat");
+        free(per_round_keys);
+        return FAILURE;
+    }
+
+    size_t data_size = in_stat.st_size - in_offset;
+    if (data_size == 0) {
+        fprintf(stderr, "[PIPELINED I/O] No data to process\n");
+        free(per_round_keys);
+        return SUCCESS;
+    }
+
+    size_t num_chunks = (data_size + CHUNK_SIZE_BYTES - 1) / CHUNK_SIZE_BYTES;
+
+    fprintf(stderr, "[PIPELINED I/O] File size: %zu bytes, %zu chunks of %u bytes\n",
+            data_size, num_chunks, CHUNK_SIZE_BYTES);
+    fprintf(stderr, "[PIPELINED I/O] Pipeline depth: %d (memory footprint: %d KB)\n",
+            PIPELINE_DEPTH, (PIPELINE_DEPTH * CHUNK_SIZE_BYTES) / 1024);
+
+    // Allocate circular buffer array
+    uint8_t** buffers = (uint8_t**)malloc(PIPELINE_DEPTH * sizeof(uint8_t*));
+    if (!buffers) {
+        fprintf(stderr, "Failed to allocate buffer array\n");
+        free(per_round_keys);
+        return FAILURE;
+    }
+
+    for (int i = 0; i < PIPELINE_DEPTH; i++) {
+        buffers[i] = (uint8_t*)malloc(CHUNK_SIZE_BYTES);
+        if (!buffers[i]) {
+            fprintf(stderr, "Failed to allocate buffer %d\n", i);
+            for (int j = 0; j < i; j++) {
+                free(buffers[j]);
+            }
+            free(buffers);
+            free(per_round_keys);
+            return FAILURE;
+        }
+    }
+
+    // Array to track actual bytes read per chunk
+    size_t* chunk_sizes = (size_t*)malloc(num_chunks * sizeof(size_t));
+    if (!chunk_sizes) {
+        fprintf(stderr, "Failed to allocate chunk_sizes array\n");
+        for (int i = 0; i < PIPELINE_DEPTH; i++) {
+            free(buffers[i]);
+        }
+        free(buffers);
+        free(per_round_keys);
+        return FAILURE;
+    }
+
+    fprintf(stderr, "[PIPELINED I/O] Entering parallel region\n");
     fflush(stderr);
 
-    uint32_t global_block_counter = 0;
+    double start_time = omp_get_wtime();
 
-    #pragma omp parallel shared(per_round_keys, baseline_state, ec, global_block_counter)
+    #pragma omp parallel shared(buffers, per_round_keys, baseline_state, ec, chunk_sizes)
     #pragma omp single
     {
-        const uint32_t CHUNKS_PER_BATCH = 16;
-        const uint32_t CHUNK_SIZE_BLOCKS = BUFFER_SIZE;
-        const uint32_t CHUNK_SIZE_BYTES = CHUNK_SIZE_BLOCKS * AES_BLOCK_SIZE;
+        fprintf(stderr, "[PIPELINED I/O] Starting pipeline with %d threads\n",
+            omp_get_num_threads());
 
-        fprintf(stderr, "[TASK] Processing with batch_size=%u, chunk_size=%u blocks\n",
-                CHUNKS_PER_BATCH, CHUNK_SIZE_BLOCKS);
+        for (size_t chunk = 0; chunk < num_chunks; chunk++) {
+            size_t buf_idx = chunk % PIPELINE_DEPTH;
+            off_t chunk_offset = in_offset + (chunk * CHUNK_SIZE_BYTES);
+            size_t chunk_size = (chunk == num_chunks - 1)
+                ? (data_size - chunk * CHUNK_SIZE_BYTES)
+                : CHUNK_SIZE_BYTES;
 
-        while (ec == SUCCESS) {
-            // ===== PHASE 1: READ BATCH =====
-            // Allocate batch array on stack (bounded memory)
-            Chunk batch[CHUNKS_PER_BATCH];
-            uint32_t chunks_read = 0;
+            uint32_t block_start = chunk * CHUNK_SIZE_BLOCKS;
+            uint32_t block_count = (chunk_size + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE;
 
-            for (uint32_t i = 0; i < CHUNKS_PER_BATCH; i++) {
-                uint8_t* read_buffer = (uint8_t*)malloc(CHUNK_SIZE_BYTES);
-                if (!read_buffer) {
-                    fprintf(stderr, "[TASK] Failed to allocate read buffer\n");
+            // STAGE 1: READ TASK
+            #pragma omp task if(ec == SUCCESS) depend(out: buffers[buf_idx]) \
+                             firstprivate(chunk, buf_idx, chunk_offset, chunk_size)
+            {
+                ssize_t bytes_read = pread(in_fd, buffers[buf_idx], chunk_size, chunk_offset);
+
+                if (bytes_read < 0) {
+                    perror("pread");
+                    #pragma omp atomic write
                     ec = FAILURE;
-                    break;
+                } else if ((size_t)bytes_read != chunk_size) {
+                    PDEBUG("[READ] Warning: read %zd bytes, expected %zu\n",
+                            bytes_read, chunk_size);
+                    chunk_sizes[chunk] = bytes_read;
+                } else {
+                    chunk_sizes[chunk] = chunk_size;
                 }
 
-                size_t read_bytes = fread(read_buffer, 1, CHUNK_SIZE_BYTES, in_fp);
-                if (read_bytes == 0) {
-                    free(read_buffer);
-                    break;
-                }
-
-                // Setup chunk metadata
-                batch[i].data = read_buffer;
-                batch[i].size = read_bytes;
-                batch[i].block_start = global_block_counter;
-                batch[i].block_count = ceil_div(read_bytes, AES_BLOCK_SIZE);
-
-                global_block_counter += batch[i].block_count;
-                chunks_read++;
+                PDEBUG("[READ] Chunk %zu: read %zu bytes from offset %ld",
+                       chunk, chunk_sizes[chunk], chunk_offset);
             }
 
-            if (chunks_read == 0) {
-                break;  // EOF reached
-            }
+            // STAGE 2: ENCRYPT TASK
+            #pragma omp task if(ec == SUCCESS) depend(inout: buffers[buf_idx]) \
+                             firstprivate(chunk, buf_idx, block_start, block_count) \
+                             shared(per_round_keys, baseline_state, ec, chunk_sizes)
+            {
+                size_t bytes_to_process = chunk_sizes[chunk];
 
-            fprintf(stderr, "[TASK] Read batch: %u chunks (%u total blocks)\n",
-                    chunks_read, global_block_counter);
+                PDEBUG("[ENCRYPT] Chunk %zu: processing %u blocks (%zu bytes)",
+                       chunk, block_count, bytes_to_process);
 
-            // ===== PHASE 2: ENCRYPT IN PARALLEL =====
-            // Create one task per chunk - tasks execute in parallel on worker threads
-            for (uint32_t i = 0; i < chunks_read; i++) {
-                Chunk* c = &batch[i];
+                for (uint32_t j = 0; j < block_count; j++) {
+                    uint8_t state[AES_BLOCK_SIZE];
+                    uint32_t block_counter = block_start + j;
 
-                #pragma omp task firstprivate(c) shared(per_round_keys, baseline_state, ec)
-                {
-                    if (ec == SUCCESS) {
-                        PDEBUG("Task encrypting chunk: blocks %u-%u (%u blocks, %zu bytes)",
-                               c->block_start, c->block_start + c->block_count - 1,
-                               c->block_count, c->size);
+                    // Initialize counter state
+                    memcpy(state, baseline_state, AES_BLOCK_SIZE);
+                    state[AES_BLOCK_SIZE - 4] = (block_counter >> 24) & 0xFF;
+                    state[AES_BLOCK_SIZE - 3] = (block_counter >> 16) & 0xFF;
+                    state[AES_BLOCK_SIZE - 2] = (block_counter >> 8) & 0xFF;
+                    state[AES_BLOCK_SIZE - 1] = block_counter & 0xFF;
 
-                        // Encrypt all blocks in this chunk
-                        for (uint32_t j = 0; j < c->block_count; j++) {
-                            uint8_t state[AES_BLOCK_SIZE];
-                            uint32_t block_counter = c->block_start + j;
+                    // Generate keystream
+                    aes_block_encrypt(state, (const uint8_t*)per_round_keys);
 
-                            // Initialize counter state
-                            memcpy(state, baseline_state, AES_BLOCK_SIZE);
-                            state[AES_BLOCK_SIZE - 4] = (block_counter >> 24) & 0xFF;
-                            state[AES_BLOCK_SIZE - 3] = (block_counter >> 16) & 0xFF;
-                            state[AES_BLOCK_SIZE - 2] = (block_counter >> 8) & 0xFF;
-                            state[AES_BLOCK_SIZE - 1] = block_counter & 0xFF;
+                    // XOR with plaintext
+                    size_t offset = j * AES_BLOCK_SIZE;
+                    size_t bytes_in_block = (offset + AES_BLOCK_SIZE <= bytes_to_process)
+                        ? AES_BLOCK_SIZE
+                        : (bytes_to_process - offset);
 
-                            // Generate keystream
-                            aes_block_encrypt(state, (const uint8_t*)per_round_keys);
-
-                            // XOR with plaintext
-                            size_t offset = j * AES_BLOCK_SIZE;
-                            size_t bytes_to_xor = min_u32(c->size - offset, AES_BLOCK_SIZE);
-
-                            for (size_t k = 0; k < bytes_to_xor; k++) {
-                                c->data[offset + k] ^= state[k];
-                            }
-                        }
-
-                        PDEBUG("Task completed chunk: blocks %u-%u",
-                               c->block_start, c->block_start + c->block_count - 1);
+                    for (size_t k = 0; k < bytes_in_block; k++) {
+                        buffers[buf_idx][offset + k] ^= state[k];
                     }
                 }
+
+                PDEBUG("[ENCRYPT] Chunk %zu: complete", chunk);
             }
 
-            // ===== PHASE 3: WAIT FOR ALL ENCRYPTIONS =====
-            // Explicit synchronization point - ensures all tasks complete before writing
-            #pragma omp taskwait
+            // STAGE 3: WRITE TASK
+            #pragma omp task if(ec == SUCCESS) depend(in: buffers[buf_idx]) \
+                             firstprivate(chunk, buf_idx, chunk_offset) \
+                             shared(ec, chunk_sizes)
+            {
+                size_t bytes_to_write = chunk_sizes[chunk];
+                off_t write_offset = out_offset + (chunk * CHUNK_SIZE_BYTES);
 
-            fprintf(stderr, "[TASK] All encryption tasks complete, writing batch\n");
+                ssize_t bytes_written = pwrite(out_fd, buffers[buf_idx],
+                                               bytes_to_write, write_offset);
 
-            // ===== PHASE 4: WRITE RESULTS IN ORDER =====
-            // Sequential write ensures correct output order
-            if (ec == SUCCESS) {
-                for (uint32_t i = 0; i < chunks_read; i++) {
-                    size_t written = fwrite(batch[i].data, 1, batch[i].size, out_fp);
-                    if (written != batch[i].size) {
-                        fprintf(stderr, "[TASK] Write failed for chunk %u\n", i);
-                        ec = FAILURE;
-                        break;
-                    }
-
-                    PDEBUG("Wrote chunk %u: %zu bytes", i, written);
+                if (bytes_written < 0) {
+                    perror("pwrite");
+                    #pragma omp atomic write
+                    ec = FAILURE;
+                } else if ((size_t)bytes_written != bytes_to_write) {
+                    fprintf(stderr, "[WRITE] Error: wrote %zd bytes, expected %zu\n",
+                            bytes_written, bytes_to_write);
+                    #pragma omp atomic write
+                    ec = FAILURE;
                 }
-            }
 
-            // ===== PHASE 5: CLEANUP BATCH =====
-            for (uint32_t i = 0; i < chunks_read; i++) {
-                free(batch[i].data);
+                PDEBUG("[WRITE] Chunk %zu: wrote %zu bytes to offset %ld",
+                       chunk, bytes_to_write, write_offset);
             }
-
-            fprintf(stderr, "[TASK] Batch complete, processed %u chunks\n\n", chunks_read);
         }
 
-        fprintf(stderr, "[TASK] All batches processed, total blocks: %u\n", global_block_counter);
-    }  // End of single region - implicit barrier
+        PDEBUG("[PIPELINED I/O] All tasks spawned, waiting for completion...\n");
+    }  // End of single region
+
+    // Update file positions
+    fseek(in_fp, in_offset + data_size, SEEK_SET);
+    fseek(out_fp, out_offset + data_size, SEEK_SET);
 
     // Cleanup
+    for (int i = 0; i < PIPELINE_DEPTH; i++) {
+        free(buffers[i]);
+    }
+    free(buffers);
+    free(chunk_sizes);
+
     memset(per_round_keys, 0, AES_ROUND_KEY_SIZE);
     free(per_round_keys);
     memset(baseline_state, 0, AES_BLOCK_SIZE);
 
-    fprintf(stderr, "[TASK PIPELINE] Processing complete (ec=%d)\n", ec);
     return ec;
 }
