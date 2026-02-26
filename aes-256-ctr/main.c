@@ -1,7 +1,7 @@
 #include "consts.h"
 #include "arg_parsing.h"
 #include "aes-utils.h"
-#include "aes.h"
+#include "aes-ctr-core.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,7 +64,12 @@ int main(int argc, char *argv[]) {
         goto cleanup_out;
     }
 
-    int aes_ec = aes_ctr_process(in_fp, out_fp, parsed_args->key, nonce);
+    // Select implementation: can be overridden at compile time with -D flag
+    #ifndef AES_CTR_IMPL
+    #define AES_CTR_IMPL aes_ctr_process_serial
+    #endif
+
+    int aes_ec = aes_ctr_process(in_fp, out_fp, parsed_args->key, nonce, AES_CTR_IMPL);
     if (aes_ec != SUCCESS) {
         fprintf(stderr, "Failed to process file\n");
         ec = FAILURE;

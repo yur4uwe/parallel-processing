@@ -1,4 +1,4 @@
-#include "consts.h"
+#include "aes-ctr-core.h"
 #include "aes-utils.h"
 #include <omp.h>
 #include <stddef.h>
@@ -9,11 +9,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], const uint8_t nonce[AES_NONCE_SIZE]) {
+int aes_ctr_process_parallel_pread(FILE* in_fp, FILE* out_fp, const aes_ctr_context* ctx) {
     fprintf(stderr, "[PARALLEL] Starting aes_ctr_parallel\n");
 
-    if (!key || !nonce) {
-        fprintf(stderr, "Invalid key or nonce\n");
+    if (!ctx) {
+        fprintf(stderr, "Invalid context\n");
         return FAILURE;
     }
 
@@ -48,20 +48,6 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
 
     int ec = SUCCESS;
 
-    uint8_t* per_round_keys = (uint8_t*)malloc(AES_ROUND_KEY_SIZE);
-    if (!per_round_keys) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return FAILURE;
-    }
-
-    key_schedule(key, per_round_keys);
-
-    uint8_t baseline_state[AES_BLOCK_SIZE];
-    memset(baseline_state, 0, AES_BLOCK_SIZE);
-    for (int i = 0; i < AES_NONCE_SIZE; i++) {
-        baseline_state[i] = nonce[i];
-    }
-
     fprintf(stderr, "[PARALLEL] Entering parallel region\n");
     fflush(stderr);
 
@@ -74,7 +60,7 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
 
     PDEBUG("About to read from file %d", in_fd);
 
-    #pragma omp parallel shared(per_round_keys, baseline_state, ec, in_offset, out_offset) firstprivate(in_fd, out_fd)
+    #pragma omp parallel shared(ctx, ec, in_offset, out_offset) firstprivate(in_fd, out_fd)
     {
         int tid = omp_get_thread_num();
         #pragma GCC diagnostic push
@@ -116,33 +102,11 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
 
         PDEBUG("Read %ld bytes from %d file, starting encryption", bytes_read, in_fd);
 
-        // encryption will be here
+        // Use core encryption on this block range
         #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wsign-conversion"
-        uint32_t blocks_to_encrypt = ceil_div(bytes_read, AES_BLOCK_SIZE);
+        aes_ctr_encrypt_buffer(thread_buffer, bytes_read, block_start, ctx);
         #pragma GCC diagnostic pop
-        for (uint32_t i = 0; i < blocks_to_encrypt; i++) {
-            uint8_t state[AES_BLOCK_SIZE];
-            uint32_t block_counter = block_start + i;
-
-            memcpy(state, baseline_state, AES_BLOCK_SIZE);
-            state[AES_BLOCK_SIZE - 4] = (block_counter >> 24) & 0xFF;
-            state[AES_BLOCK_SIZE - 3] = (block_counter >> 16) & 0xFF;
-            state[AES_BLOCK_SIZE - 2] = (block_counter >> 8) & 0xFF;
-            state[AES_BLOCK_SIZE - 1] = block_counter & 0xFF;
-
-            aes_block_encrypt(state, (const uint8_t*)per_round_keys);
-            size_t bytes_to_xor = AES_BLOCK_SIZE;
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wsign-conversion"
-            if ((size_t)bytes_read - i * AES_BLOCK_SIZE < AES_BLOCK_SIZE) {
-                bytes_to_xor = bytes_read - i * AES_BLOCK_SIZE;
-            }
-            #pragma GCC diagnostic pop
-            for (size_t j = 0; j < bytes_to_xor; j++) {
-                thread_buffer[i * AES_BLOCK_SIZE + j] ^= state[j];
-            }
-        }
 
         PDEBUG("About to write to file %d", out_fd);
 
@@ -168,8 +132,5 @@ int aes_ctr_process(FILE* in_fp, FILE* out_fp, const uint8_t key[AES_KEY_SIZE], 
         (void)0;
     }
 
-    memset(per_round_keys, 0, AES_ROUND_KEY_SIZE);
-    free(per_round_keys);
-    memset(baseline_state, 0, AES_BLOCK_SIZE);
     return ec;
 }

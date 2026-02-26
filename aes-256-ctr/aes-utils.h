@@ -12,9 +12,6 @@
 #define GET_THREAD_NUM() 0
 #endif
 
-#define DEBUG(...) fprintf(stderr, __VA_ARGS__); \
-    fflush(stderr);
-
 // Color codes for different threads
 #define COLOR_RESET   "\033[0m"
 #define COLOR_RED     "\033[0;31m"
@@ -24,7 +21,7 @@
 #define COLOR_CYAN    "\033[0;36m"
 #define COLOR_YELLOW  "\033[0;33m"
 
-#define ENABLE_PDEBUG
+// #define ENABLE_PDEBUG
 
 #ifdef ENABLE_PDEBUG
 #define PDEBUG(fmt, ...) do { \
