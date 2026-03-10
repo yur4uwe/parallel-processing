@@ -1,0 +1,115 @@
+#include "min-heap.h"
+#include "huffman.h"
+#include <stdlib.h>
+
+int parent(int index) {
+    return (index - 1) / 2;
+}
+
+int left(int index) {
+    return 2*index + 1;
+}
+
+int right(int index) {
+    return 2*index + 2;
+}
+
+void insert(min_heap* ref, huffman_node* node) {
+    if (ref->cap == 0) {
+        ref->cap = 30;
+        ref->heap = malloc(sizeof(huffman_node*) * ref->cap); // dunno why 30, maybe because alphabet can fit in one alloc?
+    }
+
+    if (ref->cap == ref->len) {
+        ref->heap = realloc(ref->heap, sizeof(huffman_node*) * ref->cap*2);
+        ref->cap *= 2;
+    }
+    uint32_t new_idx = ref->len;
+    ref->heap[new_idx] = node;
+    ref->len++;
+
+    if (ref->len == 1) return;
+
+    int parent_idx = parent(new_idx);
+    huffman_node* parent_node = ref->heap[parent_idx];
+    while (node->freq < parent_node->freq) {
+        huffman_node* tmp = NULL;
+
+        tmp = ref->heap[new_idx];
+        ref->heap[new_idx] = ref->heap[parent_idx];
+        ref->heap[parent_idx] = tmp;
+
+        if (parent_idx == 0) {
+            return;
+        }
+        new_idx = parent_idx;
+        parent_idx = parent(new_idx);
+        parent_node = ref->heap[parent_idx];
+    }
+}
+
+int select_min_child_idx(min_heap* ref, uint32_t parent_idx) {
+    uint32_t left_child_idx = left(parent_idx);
+    uint32_t right_child_idx = right(parent_idx);
+
+    if (left_child_idx >= ref->len) {
+        if (right_child_idx >= ref->len) {
+            return -1;
+        } else {
+            return right_child_idx;
+        }
+    }
+
+    if (right_child_idx >= ref->len) {
+        return left_child_idx;
+    }
+
+    if (ref->heap[left_child_idx]->freq <= ref->heap[right_child_idx]->freq) {
+        return left_child_idx;
+    } else {
+        return right_child_idx;
+    }
+}
+
+huffman_node* pop(min_heap* ref) {
+    if (ref->len == 0) {
+        return NULL;
+    }
+
+    huffman_node* res = ref->heap[0];
+
+    if (ref->len == 1) {
+        goto pop_exit;
+    }
+
+    int bubbler_idx = 0;
+    ref->heap[bubbler_idx] = ref->heap[ref->len-1];
+    ref->heap[ref->len-1] = NULL;
+
+    int min_child_idx = select_min_child_idx(ref, bubbler_idx);
+    if (min_child_idx < 0) {
+        goto pop_exit;
+    }
+
+    huffman_node* min_child = ref->heap[min_child_idx];
+
+    while (ref->heap[bubbler_idx]->freq > min_child->freq) {
+        huffman_node* tmp = NULL;
+
+        tmp = ref->heap[bubbler_idx];
+        ref->heap[bubbler_idx] = ref->heap[min_child_idx];
+        ref->heap[min_child_idx] = tmp;
+
+        bubbler_idx = min_child_idx;
+
+        min_child_idx = select_min_child_idx(ref, bubbler_idx);
+        if (min_child_idx < 0) {
+            goto pop_exit;
+        }
+        min_child = ref->heap[min_child_idx];
+    }
+
+pop_exit:
+    ref->len--;
+    return res;
+}
