@@ -24,15 +24,15 @@ void generate_codebook(char cdb[256][256], huffman_node* curr_node, char curr_co
 
     if (curr_node->left != NULL) {
         curr_code[depth] = '0';
-        generate_codebook(cdb, curr_node, curr_code, depth+1);
+        generate_codebook(cdb, curr_node->left, curr_code, depth+1);
     }
     if (curr_node->right != NULL) {
         curr_code[depth] = '1';
-        generate_codebook(cdb, curr_node, curr_code, depth+1);
+        generate_codebook(cdb, curr_node->right, curr_code, depth+1);
     }
 }
 
-void create_codebook(uint32_t freqs[256], char codebook[256][256]) {
+huffman_node* create_huffman_tree(uint32_t freqs[256]) {
     // build frequence min-heap
     min_heap* mh = malloc(sizeof(min_heap));
     for (int i = 0; i < 256; i++) {
@@ -63,8 +63,7 @@ void create_codebook(uint32_t freqs[256], char codebook[256][256]) {
         insert(mh, parent);
     }
 
-    char curr_code[256];
-    generate_codebook(codebook, mh->heap[0], curr_code, 0);
+    return mh->heap[0];
 }
 
 int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
@@ -103,26 +102,65 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
         }
     }
 
+    uint8_t padding;
     if (bit_count != 0) {
-        uint8_t padding = 8-bit_count;
+        padding = 8-bit_count;
         byte_buffer <<= padding;
-        int written = fwrite(&byte_buffer, 1, 1, out_fp);
-        if (written != 1) {
+        if (fwrite(&byte_buffer, 1, 1, out_fp) != 1) {
             printf("Failed to write last byte buffer to the output");
             return FAILURE;
         }
-        written = fwrite(&padding, 1, 1, out_fp);
-        if (written != 1) {
-            printf("Failed to write padding to the output");
-            return FAILURE;
-        }
+    } else {
+        padding = 0;
+    }
+    if (fwrite(&padding, 1, 1, out_fp) != 1) {
+        printf("Failed to write padding to the output");
+        return FAILURE;
     }
 
     return SUCCESS;
 }
 
-int decode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
-    return FAILURE;
+int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
+    uint8_t padding;
+
+    fseek(in_fp, -1, SEEK_END);
+    fread(&padding, 1, 1, in_fp);
+
+    fseek(in_fp, 0, SEEK_END);
+    uint32_t file_size = ftell(in_fp);
+    uint32_t encoded_bytes = file_size - 1 - (uint32_t)(sizeof(uint32_t) * 256);
+    uint64_t total_bits = (uint64_t)encoded_bytes * 8 - padding;
+
+    fseek(in_fp, sizeof(uint32_t) * 256, SEEK_SET);
+
+    huffman_node* curr_node = root;
+    uint64_t bits_processed = 0;
+    uint8_t curr_byte;
+
+    while (bits_processed < total_bits) {
+        if (fread(&curr_byte, 1, 1, in_fp) != 1) {
+            printf("Failed to read byte from input");
+            return FAILURE;
+        }
+
+        for (int bit_idx = 7; bit_idx >= 0 && bits_processed < total_bits; bit_idx--) {
+            int bit = (curr_byte >> bit_idx) & 1;
+            curr_node = bit ? curr_node->right : curr_node->left;
+
+            if (curr_node->left == NULL && curr_node->right == NULL) {
+                if (fwrite(&curr_node->symbol, 1, 1, out_fp) != 1) {
+                    printf("Failed to write byte to output file");
+                    return FAILURE;
+                }
+                curr_node = root;
+            }
+
+            bits_processed++;
+        }
+    }
+
+    return SUCCESS;
 }
 
 int huffman_compress(FILE* in_fp, FILE* out_fp) {
@@ -130,13 +168,16 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
     count_freq(freqs, in_fp);
 
     uint32_t written = fwrite(freqs, sizeof(uint32_t), 256, out_fp);
-    if (written != 256 * sizeof(uint32_t)) {
+    if (written != 256) {
         printf("Failed to write frequencies to the file instead written %d bytes", written);
         return FAILURE;
     }
 
+    huffman_node* root = create_huffman_tree(freqs);
+
     char codebook[256][256] = {0};
-    create_codebook(freqs, codebook);
+    char curr_code[256];
+    generate_codebook(codebook, root, curr_code, 0);
 
     return encode(codebook, in_fp, out_fp);
 }
@@ -144,13 +185,12 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
 int huffman_decompress(FILE *in_fp, FILE *out_fp) {
     uint32_t freqs[256];
     uint32_t read = fread(freqs, sizeof(uint32_t), 256, in_fp);
-    if (read != sizeof(uint32_t) * 256) {
+    if (read != 256) {
         printf("failed to read frequency table");
         return FAILURE;
     }
 
-    char codebook[256][256] = {0};
-    create_codebook(freqs, codebook);
+    huffman_node* root = create_huffman_tree(freqs);
 
-    return decode(codebook, in_fp, out_fp);
+    return decode(root, in_fp, out_fp);
 }
