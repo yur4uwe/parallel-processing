@@ -27,6 +27,22 @@ int parse_args(huffman_args* parsed_args, int argc, char* argv[]) {
             print_help(argv[0]);
             return HELP;
         }
+        if (strcmp(argv[i], "-c") == SUCCESS || strcmp(argv[i], "--compress") == SUCCESS) {
+            if (parsed_args->mode != 0) {
+                printf("Program called with both modes, what NIGGA??");
+                print_help(argv[0]);
+                return HELP;
+            }
+            parsed_args->mode = MODE_COMPRESS;
+        }
+        if (strcmp(argv[i], "-d") == SUCCESS || strcmp(argv[i], "--decompress") == SUCCESS) {
+            if (parsed_args->mode != 0) {
+                printf("Program called with both modes, what NIGGA??");
+                print_help(argv[0]);
+                return HELP;
+            }
+            parsed_args->mode = MODE_DECOMPRESS;
+        }
 
         if (in_file_set == 0) {
             parsed_args->in_path = argv[i];

@@ -1,5 +1,6 @@
 #include "arg-parsing.h"
 #include "consts.h"
+#include "huffman.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -25,6 +26,15 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Failed to open output file: %s\n", args->out_path);
         ec = FAILURE;
         goto cleanup_in;
+    }
+
+    if (args->mode == MODE_COMPRESS) {
+        ec = huffman_compress(in_fp, out_fp);
+    } else if (args->mode == MODE_DECOMPRESS) {
+        ec = huffman_decompress(in_fp, out_fp);
+    } else {
+        printf("Unrecognized mode of operation: %d", args->mode);
+        ec = FAILURE;
     }
 
 	fclose(out_fp);

@@ -6,6 +6,7 @@
 typedef struct {
 	const char* in_path;
     const char* out_path;
+    uint8_t mode;
 } huffman_args;
 
 
