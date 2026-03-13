@@ -14,8 +14,9 @@ void print_help(char* bin) {
 int parse_args(huffman_args* parsed_args, int argc, char* argv[]) {
     parsed_args->in_path = NULL;
     parsed_args->out_path = NULL;
+    parsed_args->mode = 0;
 
-    if (argc < 2 || argc > 3) {
+    if (argc < 3 || argc > 4) {
         print_help(argv[0]);
         return FAILURE;
     }
@@ -34,6 +35,7 @@ int parse_args(huffman_args* parsed_args, int argc, char* argv[]) {
                 return HELP;
             }
             parsed_args->mode = MODE_COMPRESS;
+            continue;
         }
         if (strcmp(argv[i], "-d") == SUCCESS || strcmp(argv[i], "--decompress") == SUCCESS) {
             if (parsed_args->mode != 0) {
@@ -42,6 +44,7 @@ int parse_args(huffman_args* parsed_args, int argc, char* argv[]) {
                 return HELP;
             }
             parsed_args->mode = MODE_DECOMPRESS;
+            continue;
         }
 
         if (in_file_set == 0) {

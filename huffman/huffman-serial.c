@@ -35,6 +35,10 @@ void generate_codebook(char cdb[256][256], huffman_node* curr_node, char curr_co
 huffman_node* create_huffman_tree(uint32_t freqs[256]) {
     // build frequence min-heap
     min_heap* mh = malloc(sizeof(min_heap));
+    mh->len = 0;
+    mh->cap = 0;
+    mh->heap = NULL;
+    
     for (int i = 0; i < 256; i++) {
         if (freqs[i] == 0) {
             continue;
