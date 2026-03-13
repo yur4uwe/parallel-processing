@@ -24,11 +24,14 @@ void insert(min_heap* ref, huffman_node* node) {
         ref->heap = realloc(ref->heap, sizeof(huffman_node*) * ref->cap*2);
         ref->cap *= 2;
     }
+
     uint32_t new_idx = ref->len;
     ref->heap[new_idx] = node;
     ref->len++;
 
-    if (ref->len == 1) return;
+    if (ref->len == 1) {
+        return;
+    }
 
     int parent_idx = parent(new_idx);
     huffman_node* parent_node = ref->heap[parent_idx];
@@ -52,7 +55,8 @@ int select_min_child_idx(min_heap* ref, uint32_t parent_idx) {
     uint32_t left_child_idx = left(parent_idx);
     uint32_t right_child_idx = right(parent_idx);
 
-    if (left_child_idx >= ref->len) {
+
+    if (left_child_idx >= ref->len || ref->heap[left_child_idx] == NULL) {
         if (right_child_idx >= ref->len) {
             return -1;
         } else {
@@ -60,9 +64,10 @@ int select_min_child_idx(min_heap* ref, uint32_t parent_idx) {
         }
     }
 
-    if (right_child_idx >= ref->len) {
+    if (right_child_idx >= ref->len || ref->heap[right_child_idx] == NULL) {
         return left_child_idx;
     }
+
 
     if (ref->heap[left_child_idx]->freq <= ref->heap[right_child_idx]->freq) {
         return left_child_idx;
@@ -79,30 +84,31 @@ huffman_node* pop(min_heap* ref) {
     huffman_node* res = ref->heap[0];
 
     if (ref->len == 1) {
+        ref->heap[0] = NULL;
         goto pop_exit;
     }
 
-    int bubbler_idx = 0;
-    ref->heap[bubbler_idx] = ref->heap[ref->len-1];
+    int sinker_idx = 0;
+    ref->heap[sinker_idx] = ref->heap[ref->len-1];
     ref->heap[ref->len-1] = NULL;
 
-    int min_child_idx = select_min_child_idx(ref, bubbler_idx);
+    int min_child_idx = select_min_child_idx(ref, sinker_idx);
     if (min_child_idx < 0) {
         goto pop_exit;
     }
 
     huffman_node* min_child = ref->heap[min_child_idx];
 
-    while (ref->heap[bubbler_idx]->freq > min_child->freq) {
+    while (ref->heap[sinker_idx]->freq > min_child->freq) {
         huffman_node* tmp = NULL;
 
-        tmp = ref->heap[bubbler_idx];
-        ref->heap[bubbler_idx] = ref->heap[min_child_idx];
+        tmp = ref->heap[sinker_idx];
+        ref->heap[sinker_idx] = ref->heap[min_child_idx];
         ref->heap[min_child_idx] = tmp;
 
-        bubbler_idx = min_child_idx;
+        sinker_idx = min_child_idx;
 
-        min_child_idx = select_min_child_idx(ref, bubbler_idx);
+        min_child_idx = select_min_child_idx(ref, sinker_idx);
         if (min_child_idx < 0) {
             goto pop_exit;
         }
