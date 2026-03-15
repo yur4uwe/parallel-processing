@@ -1,8 +1,6 @@
-
-
 #include "arg-parsing.h"
 #include "consts.h"
-#include "huffman-parallel.h"
+#include "parallel/huffman.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
@@ -28,16 +26,16 @@ int main(int argc, char* argv[]) {
 
 	MPI_File in_fp;
 	if (MPI_File_open(
-		MPI_COMM_WORLD, 
-		hfmn_args->in_path, 
-		MPI_MODE_RDONLY, 
-		MPI_INFO_NULL, 
+		MPI_COMM_WORLD,
+		hfmn_args->in_path,
+		MPI_MODE_RDONLY,
+		MPI_INFO_NULL,
 		&in_fp
 	) != MPI_SUCCESS) {
 		printf("failed to open input file, aborting");
 		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 	}
-	
+
 	MPI_File out_fp;
 	if (rank == 0) {
 		if (MPI_File_open(
@@ -74,6 +72,6 @@ cleanup_in:
 	}
 
 	MPI_Finalize();
-	
+
 	return ec;
 }

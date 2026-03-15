@@ -9,6 +9,9 @@
 
 void print_help(char* bin) {
     printf("Usage: %s <input_file> <output_file>\n", bin);
+    printf("OPTIONS:\n");
+    printf("  -c, --compress    Compress the input file\n");
+    printf("  -d, --decompress  Decompress the input file\n");
 }
 
 int parse_args(huffman_args* parsed_args, int argc, char* argv[]) {

@@ -3,16 +3,16 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <mpi.h>
 
 typedef struct {
-	uint32_t len;
-	uint8_t* symbols;
-	uint32_t* freqs;
-} freq_list;
+    uint8_t symbol;
+    uint32_t freq;
+} freq_entry;
 
-int swrite_table(FILE* output, uint32_t freq[256]);
-int sread_table(FILE* input, uint32_t freq[256]);
+typedef struct {
+    uint32_t len;
+    freq_entry* entries;
+} freq_table;
 
-int pwrite_table(MPI_File output, uint32_t freq[256]);
-int pread_table(MPI_File input, uint32_t freq[256]);
+void table_to_entries(freq_table* tbl, uint32_t freq[256]);
+void entries_to_table(freq_table* tbl, uint32_t freq[256]);

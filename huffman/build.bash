@@ -29,31 +29,45 @@ is_valid_variant() {
     return 1
 }
 
-build_variant() {
-    local mode=$1
-    local output="$BUILD_DIR/huffman-${mode}"
-    local sources="arg-parsing.c main.c min-heap.c huffman-${mode}.c"
-    
-    echo -e "${BLUE}Building $mode huffman...${NC}"
-    
-    if gcc -Wall -Wextra -O2 $sources -o "$output" -lm 2>&1; then
-        echo -e "${GREEN}✓ $mode huffman compiled successfully${NC}"
+build() {
+    local variant="$1"
+    local main_src output
+
+    case "$variant" in
+        serial)
+            output="$BUILD_DIR/huffman-$variant"
+            main_src="smain.c"
+            ;;
+        parallel)
+            main_src="pmain.c"
+            output="$BUILD_DIR/huffman-parallel"
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown variant '$variant'${NC}"
+            return 1
+            ;;
+    esac
+
+    local sources="arg-parsing.c $main_src min-heap.c freq-table.c $variant/freq-table.c $variant/huffman.c"
+
+    echo -e "${BLUE}Building $variant huffman...${NC}"
+
+    if mpicc -Wall -Wextra -O2 $sources -o "$output" -lm 2>&1; then
+        echo -e "${GREEN}✓ $variant huffman compiled successfully${NC}"
         echo -e "  ${YELLOW}Output: $output${NC}"
         return 0
     else
-        echo -e "${RED}✗ Failed to compile $mode huffman${NC}"
+        echo -e "${RED}✗ Failed to compile $variant huffman${NC}"
         return 1
     fi
 }
 
 build_all() {
     local failed=0
-    for variant in "${VARIANTS[@]}"; do
-        if ! build_variant "$variant"; then
-            failed=$((failed + 1))
-        fi
-    done
-    
+
+    build serial || ((failed++))
+    build parallel || ((failed++))
+
     if [ $failed -eq 0 ]; then
         echo -e "${GREEN}All builds completed successfully!${NC}"
         return 0
@@ -91,37 +105,29 @@ EOF
 }
 
 # Main script logic
-main() {
-    local target="${1:-all}"
-    
-    case "$target" in
-        help|-h|--help)
-            show_usage
-            exit 0
-            ;;
-        clean)
-            clean
-            exit 0
-            ;;
-        all|serial|parallel)
-            if ! is_valid_variant "$target"; then
-                echo -e "${RED}Error: Invalid variant '$target'${NC}"
-                show_usage
-                exit 1
-            fi
-            
-            if [ "$target" == "all" ]; then
-                build_all
-            else
-                build_variant "$target"
-            fi
-            ;;
-        *)
-            echo -e "${RED}Error: Unknown command '$target'${NC}"
-            show_usage
-            exit 1
-            ;;
-    esac
-}
+target="${1:-all}"
 
-main "$@"
+case "$target" in
+    help|-h|--help)
+        show_usage
+        exit 0
+        ;;
+    clean)
+        clean
+        exit 0
+        ;;
+    serial)
+        build serial
+        ;;
+    parallel)
+        build parallel
+        ;;
+    all)
+        build_all
+        ;;
+    *)
+        echo -e "${RED}Error: Unknown command '$target'${NC}"
+        show_usage
+        exit 1
+        ;;
+esac

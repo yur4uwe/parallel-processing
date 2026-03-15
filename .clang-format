@@ -1,0 +1,2 @@
+BasedOnStyle: Google # LLVM, Mozilla, WebKit, Microsoft
+IndentWidth: 4

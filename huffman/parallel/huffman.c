@@ -1,5 +1,5 @@
-#include "huffman-node.h"
-#include "min-heap.h"
+#include "../huffman-node.h"
+#include "../min-heap.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <mpi.h>
@@ -121,7 +121,7 @@ int huffman_compress(MPI_File in_fp, MPI_File out_fp, int size, int rank) {
     } else {
         int worker_size = size - 1; // remove master, it will unfortunately wait
         int worker_rank = rank - 1; // same
-    
+
         uint32_t chunk_size = file_size / worker_size;
         uint32_t remainder = file_size % worker_size;
 
@@ -132,11 +132,11 @@ int huffman_compress(MPI_File in_fp, MPI_File out_fp, int size, int rank) {
 
         buf = malloc(chunk_size);
         if (MPI_File_read_at(
-            in_fp, 
-            process_offset, 
-            buf, 
-            chunk_size, 
-            MPI_BYTE, 
+            in_fp,
+            process_offset,
+            buf,
+            chunk_size,
+            MPI_BYTE,
             MPI_STATUS_IGNORE
         ) != MPI_SUCCESS) {
             ec = EXIT_FAILURE;
@@ -169,7 +169,7 @@ int huffman_compress(MPI_File in_fp, MPI_File out_fp, int size, int rank) {
     if (MPI_Bcast(codebook, 256 * 256, MPI_CHAR, 0, MPI_COMM_WORLD) != MPI_SUCCESS) {
         return EXIT_FAILURE;
     }
-    
+
     if (is_master) {
         // workers can only work with the buffers they read for counting without a reread
         // thus master can only recieve whole buffer
@@ -184,4 +184,3 @@ int huffman_compress(MPI_File in_fp, MPI_File out_fp, int size, int rank) {
 int huffman_decompress(MPI_File in_fp, MPI_File out_fp) {
     return EXIT_FAILURE;
 }
-
