@@ -1,7 +1,6 @@
 #pragma once
 
-#include "huffman.h"
-#include <stdint.h>
+#include "huffman-node.h"
 
 typedef struct {
     huffman_node** heap;

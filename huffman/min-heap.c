@@ -1,5 +1,4 @@
 #include "min-heap.h"
-#include "huffman.h"
 #include <stdlib.h>
 
 int parent(int index) {

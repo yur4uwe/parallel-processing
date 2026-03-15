@@ -1,6 +1,6 @@
 #include "arg-parsing.h"
 #include "consts.h"
-#include "huffman.h"
+#include "huffman-serial.h"
 #include <stdio.h>
 #include <stdlib.h>
 

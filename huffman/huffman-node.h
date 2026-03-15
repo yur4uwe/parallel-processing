@@ -1,6 +1,4 @@
 #pragma once
-
-#include <stdio.h>
 #include <stdint.h>
 
 typedef struct huffman_node {
@@ -11,5 +9,3 @@ typedef struct huffman_node {
     struct huffman_node* right;
 } huffman_node;
 
-int huffman_compress(FILE* in_fp, FILE* out_fp);
-int huffman_decompress(FILE* in_fp, FILE* out_fp);

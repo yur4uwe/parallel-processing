@@ -1,7 +1,5 @@
-#include "huffman.h"
-#include "consts.h"
+#include "freq-table.h"
 #include "min-heap.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,8 +77,8 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
     uint32_t bytes_read = 0;
     while ((bytes_read = fread(&curr_byte, 1, 1, in_fp))) {
         if (bytes_read != 1) {
-            printf("Read failed exiting routine with FAILURE");
-            return FAILURE;
+            printf("Read failed exiting routine with EXIT_FAILURE");
+            return EXIT_FAILURE;
         }
 
         char* encoded = codebook[curr_byte];
@@ -99,7 +97,7 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
                 int written = fwrite(&byte_buffer, 1, 1, out_fp);
                 if (written != 1) {
                     printf("Failed to write byte buffer to the output");
-                    return FAILURE;
+                    return EXIT_FAILURE;
                 }
                 bit_count = 0;
                 byte_buffer = 0;
@@ -115,17 +113,17 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
         byte_buffer <<= padding;
         if (fwrite(&byte_buffer, 1, 1, out_fp) != 1) {
             printf("Failed to write last byte buffer to the output");
-            return FAILURE;
+            return EXIT_FAILURE;
         }
     } else {
         padding = 0;
     }
     if (fwrite(&padding, 1, 1, out_fp) != 1) {
         printf("Failed to write padding to the output");
-        return FAILURE;
+        return EXIT_FAILURE;
     }
 
-    return SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
@@ -134,7 +132,7 @@ int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
     fseek(in_fp, -1, SEEK_END);
     if (fread(&padding, 1, 1, in_fp) != 1) {
         printf("Failed to read padding bits number");
-        return FAILURE;
+        return EXIT_FAILURE;
     }
 
     fseek(in_fp, 0, SEEK_END);
@@ -151,7 +149,7 @@ int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
     while (bits_processed < total_bits) {
         if (fread(&curr_byte, 1, 1, in_fp) != 1) {
             printf("Failed to read byte from input");
-            return FAILURE;
+            return EXIT_FAILURE;
         }
 
         for (int bit_idx = 7; bit_idx >= 0 && bits_processed < total_bits; bit_idx--) {
@@ -161,7 +159,7 @@ int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
             if (curr_node->left == NULL && curr_node->right == NULL) {
                 if (fwrite(&curr_node->symbol, 1, 1, out_fp) != 1) {
                     printf("Failed to write byte to output file");
-                    return FAILURE;
+                    return EXIT_FAILURE;
                 }
                 curr_node = root;
             }
@@ -170,16 +168,16 @@ int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
         }
     }
 
-    return SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 int huffman_compress(FILE* in_fp, FILE* out_fp) {
     uint32_t freqs[256];
     count_freq(freqs, in_fp);
 
-    if (fwrite(freqs, sizeof(uint32_t), 256, out_fp) != 256) {
+    if (swrite_table(out_fp, freqs) != EXIT_SUCCESS) {
         printf("Failed to write frequencies");
-        return FAILURE;
+        return EXIT_FAILURE;
     }
 
     huffman_node* root = create_huffman_tree(freqs);
@@ -194,10 +192,9 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
 
 int huffman_decompress(FILE *in_fp, FILE *out_fp) {
     uint32_t freqs[256];
-    uint32_t read = fread(freqs, sizeof(uint32_t), 256, in_fp);
-    if (read != 256) {
-        printf("failed to read frequency table: read=%d", read);
-        return FAILURE;
+    if (sread_table(in_fp, freqs)) {
+        printf("failed to read frequency table: read");
+        return EXIT_FAILURE;
     }
 
     huffman_node* root = create_huffman_tree(freqs);
