@@ -131,18 +131,21 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
 int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
     uint8_t padding;
 
+    uint64_t compressed_stream_start = ftell(in_fp);
+
     fseek(in_fp, -1, SEEK_END);
     if (fread(&padding, 1, 1, in_fp) != 1) {
         printf("Failed to read padding bits number");
         return EXIT_FAILURE;
     }
 
-    fseek(in_fp, 0, SEEK_END);
+    // should already be at files end after reading padding byte
     uint32_t file_size = ftell(in_fp);
-    uint32_t encoded_bytes = file_size - 1 - (uint32_t)(sizeof(uint32_t) * 256);
-    uint64_t total_bits = (uint64_t)encoded_bytes * 8 - padding;
+    uint64_t encoded_bytes = file_size - 1 - compressed_stream_start;
+    uint64_t total_bits = encoded_bytes * 8 - padding;
 
-    fseek(in_fp, sizeof(uint32_t) * 256, SEEK_SET);
+    // return to stream start
+    fseek(in_fp, compressed_stream_start, SEEK_SET);
 
     huffman_node* curr_node = root;
     uint64_t bits_processed = 0;
@@ -194,7 +197,7 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
 }
 
 int huffman_decompress(FILE* in_fp, FILE* out_fp) {
-    uint32_t freqs[256];
+    uint32_t freqs[256] = {0};
     if (read_table(in_fp, freqs)) {
         printf("failed to read frequency table: read");
         return EXIT_FAILURE;

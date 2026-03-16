@@ -36,7 +36,9 @@ print_test_result() {
     else
         echo -e "${RED}✗${NC} $name"
     fi
-    [ -n "$details" ] && echo -e "  ${YELLOW}$details${NC}"
+    if [ -n "$details" ]; then
+        echo -e "  ${YELLOW}$details${NC}"
+    fi
 }
 
 # Test 1: Compression correctness (encode)

@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef struct {
-    uint8_t symbol;
+typedef struct __attribute__((packed)) {
     uint32_t freq;
+    uint8_t symbol;
 } freq_entry;
 
 typedef struct {

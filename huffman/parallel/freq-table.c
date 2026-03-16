@@ -11,12 +11,12 @@ MPI_Datatype create_freq_entry() {
     freq_entry dummy;
     MPI_Aint base;
     MPI_Get_address(&dummy, &base);
-    MPI_Get_address(&dummy.symbol, &displacements[0]);
-    MPI_Get_address(&dummy.freq, &displacements[1]);
+    MPI_Get_address(&dummy.freq, &displacements[0]);
+    MPI_Get_address(&dummy.symbol, &displacements[1]);
     displacements[0] -= base;
     displacements[1] -= base;
 
-    MPI_Datatype types[] = { MPI_UINT8_T, MPI_UINT32_T };
+    MPI_Datatype types[] = { MPI_UINT32_T, MPI_UINT8_T };
     MPI_Datatype freq_entry_type;
     MPI_Type_create_struct(2, blocklengths, displacements, types, &freq_entry_type);
     MPI_Type_commit(&freq_entry_type);

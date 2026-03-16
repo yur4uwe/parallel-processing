@@ -10,7 +10,7 @@ void table_to_entries(freq_table* tbl, uint32_t freq[256]) {
             cap *= 2;
             tbl->entries = realloc(tbl->entries, sizeof(freq_entry) * cap);
         }
-        tbl->entries[tbl->len++] = (freq_entry){ .symbol = i, .freq = freq[i] };
+        tbl->entries[tbl->len++] = (freq_entry){ .freq = freq[i], .symbol = (uint8_t)i };
     }
 }
 

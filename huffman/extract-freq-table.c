@@ -1,5 +1,11 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+typedef struct __attribute__((packed)) {
+    uint32_t freq;
+    uint8_t symbol;
+} freq_entry;
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -13,15 +19,22 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    uint32_t freqs[256];
-    fread(freqs, sizeof(uint32_t), 256, fp);
-    fclose(fp);
-
-    for (int i = 0; i < 256; i++) {
-        if (freqs[i] > 0) {
-            printf("0x%02X ('%c'): %u\n", i, (i >= 32 && i < 127) ? i : '.', freqs[i]);
-        }
+    uint32_t len;
+    if (fread(&len, sizeof(uint32_t), 1, fp) != 1) {
+        printf("Failed to read frequency table size\n");
+        fclose(fp);
+        return 1;
     }
 
+    for (uint32_t i = 0; i < len; i++) {
+        freq_entry ent;
+        if (fread(&ent, sizeof(freq_entry), 1, fp) != 1) {
+            printf("Failed to read frequency entry %u\n", i);
+            break;
+        }
+        printf("0x%02X ('%c'): %u\n", ent.symbol, (ent.symbol >= 32 && ent.symbol < 127) ? ent.symbol : '.', ent.freq);
+    }
+
+    fclose(fp);
     return 0;
 }
