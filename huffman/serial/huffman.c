@@ -1,7 +1,9 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "../consts.h"
 #include "../min-heap.h"
 #include "freq-table.h"
 
@@ -72,109 +74,181 @@ huffman_node* create_huffman_tree(uint32_t freqs[256]) {
 }
 
 int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
-    uint8_t byte_buffer = 0;
-    uint8_t bit_count = 0;
+    int ec = EXIT_SUCCESS;
 
-    uint8_t curr_byte = 0;
-    uint32_t bytes_read = 0;
-    while ((bytes_read = fread(&curr_byte, 1, 1, in_fp))) {
-        if (bytes_read != 1) {
-            printf("Read failed exiting routine with EXIT_FAILURE");
-            return EXIT_FAILURE;
-        }
+    // 1. Calculate chunk count
+    uint32_t current_in_pos = ftell(in_fp);
+    fseek(in_fp, 0, SEEK_END);
+    uint32_t file_size = ftell(in_fp);
+    fseek(in_fp, current_in_pos, SEEK_SET);
 
-        char* encoded = codebook[curr_byte];
-        int bit_idx = 0;
+    uint32_t chunk_num = (file_size + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    if (file_size == 0) chunk_num = 0;
 
-        while (encoded[bit_idx] != '\0') {
-            char bit = encoded[bit_idx];
-
-            byte_buffer <<= 1;
-            if (bit == '1') {
-                byte_buffer |= 1;
-            }
-            bit_count++;
-
-            if (bit_count == 8) {  // on full byte, flush
-                int written = fwrite(&byte_buffer, 1, 1, out_fp);
-                if (written != 1) {
-                    printf("Failed to write byte buffer to the output");
-                    return EXIT_FAILURE;
-                }
-                bit_count = 0;
-                byte_buffer = 0;
-            }
-
-            bit_idx++;
-        }
-    }
-
-    uint8_t padding;
-    if (bit_count != 0) {
-        padding = 8 - bit_count;
-        byte_buffer <<= padding;
-        if (fwrite(&byte_buffer, 1, 1, out_fp) != 1) {
-            printf("Failed to write last byte buffer to the output");
-            return EXIT_FAILURE;
-        }
-    } else {
-        padding = 0;
-    }
-    if (fwrite(&padding, 1, 1, out_fp) != 1) {
-        printf("Failed to write padding to the output");
+    // 2. Write Chunk Count to out_fp
+    if (fwrite(&chunk_num, sizeof(uint32_t), 1, out_fp) != 1) {
         return EXIT_FAILURE;
     }
 
-    return EXIT_SUCCESS;
+    if (chunk_num == 0) return EXIT_SUCCESS;
+
+    // 3. Reserve space for Chunk Size Table
+    uint32_t index_table_pos = ftell(out_fp);
+    uint32_t* chunks_index = malloc(sizeof(uint32_t) * chunk_num);
+    if (!chunks_index) return EXIT_FAILURE;
+    fseek(out_fp, chunk_num * sizeof(uint32_t), SEEK_CUR);
+
+    uint8_t chunk_buf[CHUNK_SIZE];
+    uint32_t chunk_idx = 0;
+
+    // 4. Process Chunks
+    size_t bytes_read;
+    while ((bytes_read = fread(chunk_buf, 1, CHUNK_SIZE, in_fp)) > 0) {
+        uint8_t byte_buffer = 0;
+        uint8_t bit_count = 0;
+
+        uint32_t chunk_start_pos = ftell(out_fp);
+
+        // Skip 1 byte for padding info (to be written after chunk is
+        // compressed)
+        fseek(out_fp, 1, SEEK_CUR);
+
+        for (size_t i = 0; i < bytes_read; i++) {
+            char* encoded = codebook[chunk_buf[i]];
+            for (int bit_idx = 0; encoded[bit_idx] != '\0'; bit_idx++) {
+                byte_buffer = (byte_buffer << 1) | (encoded[bit_idx] - '0');
+                bit_count++;
+
+                if (bit_count == 8) {
+                    if (fwrite(&byte_buffer, 1, 1, out_fp) != 1) {
+                        printf("Failed to write byte buffer to the output\n");
+                        ec = EXIT_FAILURE;
+                        goto exit;
+                    }
+                    bit_count = 0;
+                    byte_buffer = 0;
+                }
+            }
+        }
+
+        // Flush remaining bits
+        uint8_t padding = 0;
+        if (bit_count > 0) {
+            padding = 8 - bit_count;
+            byte_buffer <<= padding;
+            if (fwrite(&byte_buffer, 1, 1, out_fp) != 1) {
+                printf("Failed to write last byte buffer to the output\n");
+                ec = EXIT_FAILURE;
+                goto exit;
+            }
+        }
+
+        uint32_t chunk_end_pos = ftell(out_fp);
+
+        // Write padding byte at the start of this chunk
+        fseek(out_fp, chunk_start_pos, SEEK_SET);
+        if (fwrite(&padding, 1, 1, out_fp) != 1) {
+            printf("Failed to write padding to the output\n");
+            ec = EXIT_FAILURE;
+            goto exit;
+        }
+
+        // Record compressed size (including padding byte)
+        chunks_index[chunk_idx++] = chunk_end_pos - chunk_start_pos;
+
+        // Resume at end of bitstream for next chunk
+        fseek(out_fp, chunk_end_pos, SEEK_SET);
+    }
+
+    // 5. Write the Chunk Size Table
+    fseek(out_fp, index_table_pos, SEEK_SET);
+    if (fwrite(chunks_index, sizeof(uint32_t), chunk_num, out_fp) !=
+        chunk_num) {
+        printf("failed to write chunking index to file\n");
+        ec = EXIT_FAILURE;
+    }
+
+exit:
+    free(chunks_index);
+    return ec;
 }
 
 int decode(huffman_node* root, FILE* in_fp, FILE* out_fp) {
-    uint8_t padding;
-
-    uint64_t compressed_stream_start = ftell(in_fp);
-
-    fseek(in_fp, -1, SEEK_END);
-    if (fread(&padding, 1, 1, in_fp) != 1) {
-        printf("Failed to read padding bits number");
+    uint32_t chunk_count;
+    if (fread(&chunk_count, sizeof(uint32_t), 1, in_fp) != 1) {
+        printf("failed to read amount of chunks\n");
         return EXIT_FAILURE;
     }
 
-    // should already be at files end after reading padding byte
-    uint32_t file_size = ftell(in_fp);
-    uint64_t encoded_bytes = file_size - 1 - compressed_stream_start;
-    uint64_t total_bits = encoded_bytes * 8 - padding;
+    if (chunk_count == 0) return EXIT_SUCCESS;
 
-    // return to stream start
-    fseek(in_fp, compressed_stream_start, SEEK_SET);
+    int ec = EXIT_SUCCESS;
+    uint32_t* index_table = malloc(chunk_count * sizeof(uint32_t));
+    if (!index_table) return EXIT_FAILURE;
 
-    huffman_node* curr_node = root;
-    uint64_t bits_processed = 0;
-    uint8_t curr_byte;
-
-    while (bits_processed < total_bits) {
-        if (fread(&curr_byte, 1, 1, in_fp) != 1) {
-            printf("Failed to read byte from input");
-            return EXIT_FAILURE;
-        }
-
-        for (int bit_idx = 7; bit_idx >= 0 && bits_processed < total_bits;
-             bit_idx--) {
-            int bit = (curr_byte >> bit_idx) & 1;
-            curr_node = bit ? curr_node->right : curr_node->left;
-
-            if (curr_node->left == NULL && curr_node->right == NULL) {
-                if (fwrite(&curr_node->symbol, 1, 1, out_fp) != 1) {
-                    printf("Failed to write byte to output file");
-                    return EXIT_FAILURE;
-                }
-                curr_node = root;
-            }
-
-            bits_processed++;
-        }
+    if (fread(index_table, sizeof(uint32_t), chunk_count, in_fp) !=
+        chunk_count) {
+        printf("failed to read chunk index\n");
+        ec = EXIT_FAILURE;
+        goto exit;
     }
 
-    return EXIT_SUCCESS;
+    uint8_t* chunk_data = NULL;
+
+    for (uint32_t i = 0; i < chunk_count; i++) {
+        uint32_t total_chunk_size = index_table[i];
+        if (total_chunk_size == 0) continue;
+
+        uint8_t chunk_padding = 0;
+        if (fread(&chunk_padding, 1, 1, in_fp) != 1) {
+            printf("failed to read padding for chunk %u\n", i);
+            ec = EXIT_FAILURE;
+            goto exit;
+        }
+
+        uint32_t bitstream_size = total_chunk_size - 1;
+        chunk_data = malloc(bitstream_size);
+        if (!chunk_data) {
+            ec = EXIT_FAILURE;
+            goto exit;
+        }
+
+        if (fread(chunk_data, 1, bitstream_size, in_fp) != bitstream_size) {
+            printf("failed to read chunk %u data\n", i);
+            ec = EXIT_FAILURE;
+            goto exit;
+        }
+
+        huffman_node* curr_node = root;
+        for (uint32_t j = 0; j < bitstream_size; j++) {
+            uint8_t curr_byte = chunk_data[j];
+
+            for (int bit_idx = 7; bit_idx >= 0; bit_idx--) {
+                if (j == bitstream_size - 1 && bit_idx < (int)chunk_padding) {
+                    break;
+                }
+
+                int bit = (curr_byte >> bit_idx) & 1;
+                curr_node = bit ? curr_node->right : curr_node->left;
+
+                if (curr_node->left == NULL && curr_node->right == NULL) {
+                    if (fwrite(&curr_node->symbol, 1, 1, out_fp) != 1) {
+                        printf("Failed to write byte to output file\n");
+                        ec = EXIT_FAILURE;
+                        goto exit;
+                    }
+                    curr_node = root;
+                }
+            }
+        }
+        free(chunk_data);
+        chunk_data = NULL;
+    }
+
+exit:
+    free(index_table);
+    if (chunk_data) free(chunk_data);
+    return ec;
 }
 
 int huffman_compress(FILE* in_fp, FILE* out_fp) {

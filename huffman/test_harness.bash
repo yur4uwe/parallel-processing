@@ -15,7 +15,24 @@ BIN_DIR="bin"
 TEST_DIR="test"
 TEMP_DIR=$(mktemp -d)
 VARIANTS=(serial)
-# Note: parallel variant requires mpirun and is tested separately
+FAILED_DIR="failed_test"
+SAVE_ARTIFACTS=false
+
+# Parse flags and arguments
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --save-failed)
+            SAVE_ARTIFACTS=true
+            mkdir -p "$FAILED_DIR"
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+
+target="${ARGS[0]:-all}"
 
 cleanup() {
     rm -rf "$TEMP_DIR"
@@ -63,6 +80,15 @@ test_encode_correctness() {
                 else
                     print_test_result "$variant: $filename" "FAIL" "Output differs from expected"
                     failed=$((failed+1))
+                    if [ "$SAVE_ARTIFACTS" = true ]; then
+                        # Determine extension for artifact
+                        local ext="${filename##*.}"
+                        if [ "$ext" = "txt" ]; then
+                            cp "$output" "$FAILED_DIR/${variant}_${filename%.txt}.huff"
+                        else
+                            cp "$output" "$FAILED_DIR/${variant}_${filename%.huff}.txt"
+                        fi
+                    fi
                 fi
             else
                 print_test_result "$variant: $filename" "FAIL" "Compression failed"
@@ -97,6 +123,15 @@ test_decode_correctness() {
                 else
                     print_test_result "$variant: $filename" "FAIL" "Output differs from expected"
                     failed=$((failed+1))
+                    if [ "$SAVE_ARTIFACTS" = true ]; then
+                        # Determine extension for artifact
+                        local ext="${filename##*.}"
+                        if [ "$ext" = "txt" ]; then
+                            cp "$output" "$FAILED_DIR/${variant}_${filename%.txt}.huff"
+                        else
+                            cp "$output" "$FAILED_DIR/${variant}_${filename%.huff}.txt"
+                        fi
+                    fi
                 fi
             else
                 print_test_result "$variant: $filename" "FAIL" "Decompression failed"
@@ -177,7 +212,7 @@ show_usage() {
     cat << EOF
 ${BLUE}Huffman Compression Test Harness${NC}
 
-Usage: $0 [COMMAND]
+Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
   all               Run all tests (correctness, performance, ratio)
@@ -189,11 +224,11 @@ Commands:
   mpi-tests         Run tests with MPI (parallel version)
   help              Show this message
 
-Examples:
-  $0                 # Run all tests
-  $0 correctness    # Run correctness tests
-  $0 performance    # Test performance
+Options:
+  --save-failed     Save failed test artifacts to $FAILED_DIR/
 
+Examples:
+  $0 correctness --save-failed
 EOF
 }
 

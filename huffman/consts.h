@@ -7,6 +7,8 @@ enum {
 
     MODE_COMPRESS = 10,
     MODE_DECOMPRESS = 11,
+
+    CHUNK_SIZE = 64 * 1024,
 };
 
 #define DEBUG(fmt, ...)                                               \
