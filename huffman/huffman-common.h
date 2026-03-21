@@ -9,13 +9,13 @@
 
 /**
  * Generates a codebook from a Huffman tree.
- * @param cdb The codebook to populate (256 entries, each up to 256 chars).
+ * @param cdb The codebook to populate (256 entries, each up to 512 chars).
  * @param curr_node The current node in the Huffman tree.
  * @param curr_code Buffer to store the current code being generated.
  * @param depth Current depth in the tree.
  */
-void generate_codebook(char cdb[256][256], huffman_node* curr_node,
-                       char curr_code[256], uint8_t depth);
+void generate_codebook(char cdb[256][512], huffman_node* curr_node,
+                       char curr_code[512], uint16_t depth);
 
 /**
  * Creates a Huffman tree from a frequency table.

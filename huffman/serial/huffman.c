@@ -19,7 +19,7 @@ void count_freq(uint32_t freqs[256], FILE* fp) {
     fseek(fp, pos, SEEK_SET);
 }
 
-int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
+int encode(char codebook[256][512], FILE* in_fp, FILE* out_fp) {
     int ec = EXIT_SUCCESS;
 
     // 1. Calculate chunk count
@@ -61,7 +61,7 @@ int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {
 
         for (size_t i = 0; i < bytes_read; i++) {
             char* encoded = codebook[chunk_buf[i]];
-            for (int bit_idx = 0; encoded[bit_idx] != '\0'; bit_idx++) {
+            for (uint32_t bit_idx = 0; encoded[bit_idx] != '\0'; bit_idx++) {
                 byte_buffer = (byte_buffer << 1) | (encoded[bit_idx] - '0');
                 bit_count++;
 
@@ -198,18 +198,30 @@ exit:
 }
 
 int huffman_compress(FILE* in_fp, FILE* out_fp) {
-    uint32_t freqs[256];
-    count_freq(freqs, in_fp);
+    fseek(in_fp, 0, SEEK_END);
+    uint32_t file_size = ftell(in_fp);
+    fseek(in_fp, 0, SEEK_SET);
+
+    uint32_t freqs[256] = {0};
+    if (file_size > 0) {
+        count_freq(freqs, in_fp);
+    }
 
     if (write_table(out_fp, freqs) != EXIT_SUCCESS) {
         printf("Failed to write frequencies");
         return EXIT_FAILURE;
     }
 
+    if (file_size == 0) {
+        uint32_t chunk_num = 0;
+        fwrite(&chunk_num, sizeof(uint32_t), 1, out_fp);
+        return EXIT_SUCCESS;
+    }
+
     huffman_node* root = create_huffman_tree(freqs);
 
-    char codebook[256][256] = {0};
-    char curr_code[256];
+    char codebook[256][512] = {0};
+    char curr_code[512];
 
     generate_codebook(codebook, root, curr_code, 0);
 

@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-void generate_codebook(char cdb[256][256], huffman_node* curr_node,
-                       char curr_code[256], uint8_t depth) {
+void generate_codebook(char cdb[256][512], huffman_node* curr_node,
+                       char curr_code[512], uint16_t depth) {
     if (curr_node->left == NULL && curr_node->right == NULL) {
         curr_code[depth] = '\0';
         strcpy(cdb[curr_node->symbol], curr_code);
