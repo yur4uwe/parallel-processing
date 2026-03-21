@@ -1,5 +1,6 @@
 #include "min-heap.h"
 #include <stdlib.h>
+#include "huffman-node.h"
 
 int parent(int index) {
     return (index - 1) / 2;
@@ -14,9 +15,9 @@ int right(int index) {
 }
 
 void insert(min_heap* ref, huffman_node* node) {
-    if (ref->cap == 0) {
-        ref->cap = 30;
-        ref->heap = malloc(sizeof(huffman_node*) * ref->cap); // dunno why 30, maybe because alphabet can fit in one alloc?
+    if (ref->heap == NULL || ref->cap == 0) {
+        ref->cap = ref->cap ? ref->cap : 32;
+        ref->heap = malloc(sizeof(huffman_node) * ref->cap);
     }
 
     if (ref->cap == ref->len) {

@@ -1,4 +1,5 @@
 #include "freq-table.h"
+#include <stdint.h>
 
 void table_to_entries(freq_table* tbl, uint32_t freq[256]) {
     uint32_t cap = 32;
@@ -15,7 +16,7 @@ void table_to_entries(freq_table* tbl, uint32_t freq[256]) {
 }
 
 void entries_to_table(freq_table* tbl, uint32_t freq[256]) {
-    for (int i = 0; i < tbl->len; i++) {
+    for (uint32_t i = 0; i < tbl->len; i++) {
         freq_entry ent = tbl->entries[i];
         freq[ent.symbol] = ent.freq;
     }

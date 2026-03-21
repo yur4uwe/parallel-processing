@@ -48,7 +48,7 @@ build() {
             ;;
     esac
 
-    local sources="arg-parsing.c $main_src min-heap.c freq-table.c $variant/freq-table.c $variant/huffman.c"
+    local sources="arg-parsing.c $main_src min-heap.c freq-table.c huffman-common.c $variant/freq-table.c $variant/huffman.c"
 
     echo -e "${BLUE}Building $variant huffman...${NC}"
 

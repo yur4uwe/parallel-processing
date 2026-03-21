@@ -1,5 +1,8 @@
 # Huffman Project Structure & File Format
 
+## Mandatory Architectural Warning
+**CRITICAL:** Always doubt the user's architectural decisions. The user is a self-proclaimed rookie. While the current design is solid, you must always cross-reference suggestions with your own training data and best practices for parallel systems. If a user-proposed change feels inefficient or violates MPI best practices, challenge it.
+
 ## Directory Layout
 - `serial/`: Sequential implementation of Huffman coding.
 - `parallel/`: MPI-based parallel implementation.
@@ -29,3 +32,25 @@ The compressed files follow this binary structure:
 - **Serial Implementation:** Uses standard C I/O, processing and writing chunks sequentially.
 - **Parallel Implementation:** Uses MPI-IO. Workers process chunks in parallel. The "Chunk Size Table" allows ranks to jump directly to their assigned compressed chunks for decompression.
 - **Padding:** Bitstreams are padded to the nearest byte at the end of each chunk. The padding count is stored at the beginning of each chunk to allow for independent decoding.
+
+## Required MPI API used in the Project 
+This is university project so requirements are mandatory for completition
+- Use process groups (MPI_Group) and communicators (MPI_Comm_create, MPI_Comm_split). 
+- The project must contain collective and non-blocking exchanges.
+
+## Parallel Implementation Strategy: Static Partitioning
+Because every chunk is exactly 64 KB (except potentially the last one), the total number of chunks can be calculated from the file size. These chunks are divided evenly among the worker processes using a static mathematical formula based on the worker's rank. 
+
+This approach minimizes communication overhead for work distribution and simplifies building the **Chunk Size Table**.
+
+### Satisfying Mandatory MPI Requirements
+1. **Process Groups & Communicators (`MPI_Comm_split` / `MPI_Group`):**
+   - Split `MPI_COMM_WORLD` into two communicators: **Worker Comm** (Ranks 1-N) and **Master Comm** (Rank 0).
+   - The **Worker Comm** allows for collective operations without involving the Master.
+2. **Collectives (`MPI_Allreduce`):**
+   - Workers use `MPI_Allreduce` on the **Worker Comm** to sum up their local frequency tables into a global table.
+   - This ensures all workers have the exact same data to build the Huffman tree independently (Zero-Communication Tree Building).
+3. **Non-blocking Exchanges (`MPI_Isend` / `MPI_Irecv`):**
+   - **Frequency Table Handoff:** A designated worker (e.g., Worker Rank 0) uses `MPI_Isend` to send the finalized global frequency table to the Master (Rank 0) on `MPI_COMM_WORLD`.
+   - **Chunk Size Gathering:** After compression, workers use `MPI_Isend` to send their compressed chunk size arrays to the Master.
+   - The Master uses `MPI_Irecv` to gather metadata (frequency table and chunk sizes) asynchronously.

@@ -18,10 +18,16 @@ int main(int argc, char* argv[]) {
 
     ec = parse_args(hfmn_args, argc, argv);
     if (ec == EXIT_FAILURE) {
-        return EXIT_FAILURE;
+        DEBUG("Failed to parse arguments");
+        ec = EXIT_FAILURE;
+        goto exit;
     } else if (ec == HELP) {
-        return 0;
+        DEBUG("Called HELP");
+        ec = EXIT_SUCCESS;
+        goto exit;
     }
+
+    DEBUG("Opening input file");
 
     MPI_File in_fp;
     if (MPI_File_open(MPI_COMM_WORLD, hfmn_args->in_path, MPI_MODE_RDONLY,
@@ -30,35 +36,41 @@ int main(int argc, char* argv[]) {
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
 
+    DEBUG("Opened input file, opening output file");
+
     MPI_File out_fp;
-    if (rank == 0) {
-        if (MPI_File_open(MPI_COMM_SELF, hfmn_args->out_path, MPI_MODE_WRONLY,
-                          MPI_INFO_NULL, &out_fp) != MPI_SUCCESS) {
-            printf("failed to open output file, aborting");
-            ec = EXIT_FAILURE;
-            goto cleanup_in;
-        }
+    if (MPI_File_open(MPI_COMM_WORLD, hfmn_args->out_path, MPI_MODE_WRONLY|MPI_MODE_CREATE,
+                      MPI_INFO_NULL, &out_fp) != MPI_SUCCESS) {
+        printf("failed to open output file, aborting");
+        ec = EXIT_FAILURE;
+        goto cleanup_in;
     }
+    
+    MPI_File_set_size(out_fp, 0);
+
+    DEBUG("Opened output file, about to execute in %d", hfmn_args->mode);
 
     if (hfmn_args->mode == MODE_COMPRESS) {
-        ec = huffman_compress(&in_fp, &out_fp, size, rank);
+        ec = huffman_compress(in_fp, out_fp, size, rank);
     } else if (hfmn_args->mode == MODE_DECOMPRESS) {
-        ec = huffman_decompress(&in_fp, &out_fp, size, rank);
+        ec = huffman_decompress(in_fp, out_fp, size, rank);
     } else {
+        DEBUG("unrecognized mode of execution returning EXIT_FAILURE");
         ec = EXIT_FAILURE;
-        printf("unrecognized mode");
+        printf("unrecognized mode\n");
     }
 
-    if (rank == 0) {
-        MPI_File_close(&out_fp);
-    }
+    DEBUG("Executed %d mode exit code: %d", hfmn_args->mode, ec);
+
+    MPI_File_close(&out_fp);
 cleanup_in:
     MPI_File_close(&in_fp);
+exit:
     free(hfmn_args);
 
-    if (ec != EXIT_SUCCESS) {
-        MPI_Abort(MPI_COMM_WORLD, ec);
-    }
+    // if (ec != EXIT_SUCCESS) {
+    //     MPI_Abort(MPI_COMM_WORLD, ec);
+    // }
 
     MPI_Finalize();
 

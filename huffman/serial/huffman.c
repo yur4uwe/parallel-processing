@@ -4,73 +4,19 @@
 #include <string.h>
 
 #include "../consts.h"
+#include "../huffman-common.h"
 #include "../min-heap.h"
 #include "freq-table.h"
 
 void count_freq(uint32_t freqs[256], FILE* fp) {
     memset(freqs, 0, 256 * sizeof(uint32_t));
     uint32_t pos = ftell(fp);
-    int byte;
-    while ((byte = fgetc(fp)) != EOF) {
-        freqs[(uint8_t)byte]++;
+    uint8_t chunk_buf[CHUNK_SIZE];
+    size_t bytes_read;
+    while ((bytes_read = fread(chunk_buf, 1, CHUNK_SIZE, fp)) > 0) {
+        count_freqs_buf(freqs, chunk_buf, (uint32_t)bytes_read);
     }
     fseek(fp, pos, SEEK_SET);
-}
-
-void generate_codebook(char cdb[256][256], huffman_node* curr_node,
-                       char curr_code[256], uint8_t depth) {
-    // leaf node encountered
-    if (curr_node->left == NULL && curr_node->right == NULL) {
-        curr_code[depth] = '\0';
-        strcpy(cdb[curr_node->symbol], curr_code);
-        return;
-    }
-
-    if (curr_node->left != NULL) {
-        curr_code[depth] = '0';
-        generate_codebook(cdb, curr_node->left, curr_code, depth + 1);
-    }
-    if (curr_node->right != NULL) {
-        curr_code[depth] = '1';
-        generate_codebook(cdb, curr_node->right, curr_code, depth + 1);
-    }
-}
-
-huffman_node* create_huffman_tree(uint32_t freqs[256]) {
-    // build frequence min-heap
-    min_heap* mh = malloc(sizeof(min_heap));
-    mh->len = 0;
-    mh->cap = 0;
-    mh->heap = NULL;
-
-    for (int i = 0; i < 256; i++) {
-        if (freqs[i] == 0) {
-            continue;
-        }
-
-        huffman_node* node = malloc(sizeof(huffman_node));
-        node->freq = freqs[i];
-        node->symbol = (uint8_t)i;
-        node->left = NULL;
-        node->right = NULL;
-
-        insert(mh, node);
-    }
-
-    while (mh->len != 1) {
-        huffman_node* left = pop(mh);
-        huffman_node* right = pop(mh);
-
-        huffman_node* parent = malloc(sizeof(huffman_node));
-        parent->symbol = 0;  // meaningless for non-leaf nodes
-        parent->freq = left->freq + right->freq;
-        parent->left = left;
-        parent->right = right;
-
-        insert(mh, parent);
-    }
-
-    return mh->heap[0];
 }
 
 int encode(char codebook[256][256], FILE* in_fp, FILE* out_fp) {

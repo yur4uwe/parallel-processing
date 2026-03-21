@@ -14,9 +14,10 @@ NC='\033[0m'
 BIN_DIR="bin"
 TEST_DIR="test"
 TEMP_DIR=$(mktemp -d)
-VARIANTS=(serial)
+VARIANTS=(serial parallel)
 FAILED_DIR="failed_test"
 SAVE_ARTIFACTS=false
+NP=2 # Number of processes for MPI
 
 # Parse flags and arguments
 ARGS=()
@@ -25,6 +26,10 @@ for arg in "$@"; do
         --save-failed)
             SAVE_ARTIFACTS=true
             mkdir -p "$FAILED_DIR"
+            ;;
+        -n)
+            shift
+            NP="$1"
             ;;
         *)
             ARGS+=("$arg")
@@ -58,6 +63,16 @@ print_test_result() {
     fi
 }
 
+get_exec_cmd() {
+    local variant="$1"
+    local binary="$2"
+    if [ "$variant" = "parallel" ]; then
+        echo "mpirun -n $NP $binary"
+    else
+        echo "$binary"
+    fi
+}
+
 # Test 1: Compression correctness (encode)
 test_encode_correctness() {
     print_header "Compression Correctness Tests (Encode)"
@@ -68,12 +83,14 @@ test_encode_correctness() {
         local binary="$BIN_DIR/huffman-$variant"
         [ ! -f "$binary" ] && { echo -e "${RED}Binary not found: $binary${NC}"; failed=$((failed+1)); continue; }
 
+        local exec_cmd=$(get_exec_cmd "$variant" "$binary")
+
         for input in "$TEST_DIR"/input-encode/*.txt; do
             local filename=$(basename "$input")
             local expected="$TEST_DIR/expected-encode/${filename%.txt}.huff"
-            local output="$TEMP_DIR/${filename%.txt}.huff"
+            local output="$TEMP_DIR/${variant}_${filename%.txt}.huff"
 
-            if $binary -c "$input" "$output" > /dev/null 2>&1; then
+            if $exec_cmd -c "$input" "$output" > /dev/null 2>&1; then
                 if cmp -s "$output" "$expected"; then
                     print_test_result "$variant: $filename" "PASS"
                     passed=$((passed+1))
@@ -81,13 +98,7 @@ test_encode_correctness() {
                     print_test_result "$variant: $filename" "FAIL" "Output differs from expected"
                     failed=$((failed+1))
                     if [ "$SAVE_ARTIFACTS" = true ]; then
-                        # Determine extension for artifact
-                        local ext="${filename##*.}"
-                        if [ "$ext" = "txt" ]; then
-                            cp "$output" "$FAILED_DIR/${variant}_${filename%.txt}.huff"
-                        else
-                            cp "$output" "$FAILED_DIR/${variant}_${filename%.huff}.txt"
-                        fi
+                        cp "$output" "$FAILED_DIR/${variant}_${filename%.txt}.huff"
                     fi
                 fi
             else
@@ -111,12 +122,17 @@ test_decode_correctness() {
         local binary="$BIN_DIR/huffman-$variant"
         [ ! -f "$binary" ] && { echo -e "${RED}Binary not found: $binary${NC}"; failed=$((failed+1)); continue; }
 
+        local exec_cmd=$(get_exec_cmd "$variant" "$binary")
+
         for input in "$TEST_DIR"/input-decode/*.huff; do
             local filename=$(basename "$input")
-            local expected="$TEST_DIR/expected-decode/${filename%.huff}.huff.txt"
-            local output="$TEMP_DIR/${filename%.huff}.txt"
+            local expected="$TEST_DIR/expected-decode/${filename%.huff}.txt"
+            # Some expected files might not have .huff.txt but just .txt
+            [ ! -f "$expected" ] && expected="$TEST_DIR/expected-decode/${filename%.huff}.huff.txt"
+            
+            local output="$TEMP_DIR/${variant}_${filename%.huff}.txt"
 
-            if $binary -d "$input" "$output" > /dev/null 2>&1; then
+            if $exec_cmd -d "$input" "$output" > /dev/null 2>&1; then
                 if cmp -s "$output" "$expected"; then
                     print_test_result "$variant: $filename" "PASS"
                     passed=$((passed+1))
@@ -124,13 +140,7 @@ test_decode_correctness() {
                     print_test_result "$variant: $filename" "FAIL" "Output differs from expected"
                     failed=$((failed+1))
                     if [ "$SAVE_ARTIFACTS" = true ]; then
-                        # Determine extension for artifact
-                        local ext="${filename##*.}"
-                        if [ "$ext" = "txt" ]; then
-                            cp "$output" "$FAILED_DIR/${variant}_${filename%.txt}.huff"
-                        else
-                            cp "$output" "$FAILED_DIR/${variant}_${filename%.huff}.txt"
-                        fi
+                        cp "$output" "$FAILED_DIR/${variant}_${filename%.huff}.txt"
                     fi
                 fi
             else
@@ -158,20 +168,21 @@ test_encode_performance() {
             local binary="$BIN_DIR/huffman-$variant"
             [ ! -f "$binary" ] && continue
 
-            local output="$TEMP_DIR/${filename%.txt}.huff"
+            local exec_cmd=$(get_exec_cmd "$variant" "$binary")
+            local output="$TEMP_DIR/${variant}_${filename%.txt}.huff"
             local total_time=0
-            local iterations=5
+            local iterations=3
 
             for i in $(seq 1 $iterations); do
                 local start=$(date +%s%N)
-                $binary -c "$input" "$output" > /dev/null 2>&1
+                $exec_cmd -c "$input" "$output" > /dev/null 2>&1
                 local end=$(date +%s%N)
                 local elapsed=$(( (end - start) / 1000000 ))
                 total_time=$((total_time + elapsed))
             done
 
             local avg_time=$((total_time / iterations))
-            echo -e "  $variant: ${YELLOW}${avg_time}ms${NC} (avg over $iterations runs)"
+            echo -e "  $variant: ${YELLOW}${avg_time}ms${NC} (avg over $iterations runs, NP=$NP)"
         done
         echo ""
     done
@@ -185,14 +196,15 @@ test_compression_ratio() {
         local binary="$BIN_DIR/huffman-$variant"
         [ ! -f "$binary" ] && continue
 
+        local exec_cmd=$(get_exec_cmd "$variant" "$binary")
         echo -e "${BLUE}$variant:${NC}"
 
         for input in "$TEST_DIR"/input-encode/*.txt; do
             local filename=$(basename "$input")
             local input_size=$(stat -f%z "$input" 2>/dev/null || stat -c%s "$input")
-            local output="$TEMP_DIR/${filename%.txt}.huff"
+            local output="$TEMP_DIR/${variant}_${filename%.txt}.huff"
 
-            if $binary -c "$input" "$output" > /dev/null 2>&1; then
+            if $exec_cmd -c "$input" "$output" > /dev/null 2>&1; then
                 local output_size=$(stat -f%z "$output" 2>/dev/null || stat -c%s "$output")
                 local ratio=$(awk "BEGIN {printf \"%.2f\", ($output_size / $input_size) * 100}")
                 local reduction=$(awk "BEGIN {printf \"%.2f\", 100 - ($output_size / $input_size) * 100}")
@@ -210,7 +222,7 @@ test_compression_ratio() {
 # Main logic
 show_usage() {
     cat << EOF
-${BLUE}Huffman Compression Test Harness${NC}
+${BLUE}Huffman Compression Test Harness (MPI-enabled)${NC}
 
 Usage: $0 [COMMAND] [OPTIONS]
 
@@ -221,18 +233,17 @@ Commands:
   decode-correct    Test decompression correctness only
   performance       Test compression performance
   ratio             Show compression ratio analysis
-  mpi-tests         Run tests with MPI (parallel version)
   help              Show this message
 
 Options:
   --save-failed     Save failed test artifacts to $FAILED_DIR/
+  -n <np>           Set number of processes for MPI (default: 2)
 
 Examples:
   $0 correctness --save-failed
+  $0 performance -n 4
 EOF
 }
-
-target="${1:-all}"
 
 case "$target" in
     help|-h|--help)
@@ -260,29 +271,6 @@ case "$target" in
         test_decode_correctness
         test_encode_performance
         test_compression_ratio
-        ;;
-    mpi-tests)
-        if ! command -v mpirun &> /dev/null; then
-            echo -e "${RED}Error: mpirun not found. Please install MPI.${NC}"
-            exit 1
-        fi
-        local binary="$BIN_DIR/huffman-parallel"
-        if [ ! -f "$binary" ]; then
-            echo -e "${RED}Error: $binary not found${NC}"
-            exit 1
-        fi
-        print_header "MPI Parallel Tests"
-        echo -e "${YELLOW}Running parallel variant with mpirun...${NC}\n"
-        for input in "$TEST_DIR"/input-encode/*.txt; do
-            local filename=$(basename "$input")
-            local output="$TEMP_DIR/${filename%.txt}.huff"
-            echo "Testing: $filename"
-            if mpirun -n 2 "$binary" -c "$input" "$output" 2>&1; then
-                echo -e "${GREEN}✓ Compression succeeded${NC}\n"
-            else
-                echo -e "${RED}✗ Compression failed${NC}\n"
-            fi
-        done
         ;;
     *)
         echo -e "${RED}Error: Unknown command '$target'${NC}"

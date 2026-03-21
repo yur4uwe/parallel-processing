@@ -19,8 +19,11 @@ MPI_Datatype create_freq_entry() {
     MPI_Datatype types[] = { MPI_UINT32_T, MPI_UINT8_T };
     MPI_Datatype freq_entry_type;
     MPI_Type_create_struct(2, blocklengths, displacements, types, &freq_entry_type);
-    MPI_Type_commit(&freq_entry_type);
-    return freq_entry_type;
+
+    MPI_Datatype packed_freq_entry;
+    MPI_Type_create_resized(freq_entry_type, 0, sizeof(freq_entry), &packed_freq_entry);
+    MPI_Type_commit(&packed_freq_entry);
+    return packed_freq_entry;
 }
 
 int write_table(MPI_File output, uint32_t freq[256]) {
