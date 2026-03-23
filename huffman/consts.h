@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef CHUNK_SIZE
+#define CHUNK_SIZE (64 * 1024)
+#endif
+
 enum {
     SUCCESS = 0,
     FAILURE = 1,
@@ -7,8 +11,6 @@ enum {
 
     MODE_COMPRESS = 10,
     MODE_DECOMPRESS = 11,
-
-    CHUNK_SIZE = 64 * 1024,
 };
 
 #ifdef MPI_VERSION

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "arg-parsing.h"
 #include "consts.h"
@@ -29,6 +30,9 @@ int main(int argc, char* argv[]) {
         goto cleanup_in;
     }
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     if (args->mode == MODE_COMPRESS) {
         ec = huffman_compress(in_fp, out_fp);
     } else if (args->mode == MODE_DECOMPRESS) {
@@ -36,6 +40,13 @@ int main(int argc, char* argv[]) {
     } else {
         printf("Unrecognized mode of operation: %d", args->mode);
         ec = FAILURE;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+    if (ec == SUCCESS) {
+        double time_taken = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+        printf("TIME: %f\n", time_taken);
     }
 
     fclose(out_fp);

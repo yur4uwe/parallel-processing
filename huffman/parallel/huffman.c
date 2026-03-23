@@ -53,7 +53,7 @@ int worker_encode(char codebook[256][512], uint8_t* buf, uint32_t chunk_size, ui
     return res_buf_size;
 }
 
-uint32_t decode(huffman_node* root, uint8_t* comp_buf, uint32_t comp_buf_size, uint8_t* uncomp_buf) {
+uint32_t decode(huffman_node* root, uint8_t* comp_buf, uint32_t comp_buf_size, uint8_t* uncomp_buf, uint32_t max_uncomp_size) {
     uint8_t padding = comp_buf[0];
     uint32_t uncomp_buf_idx = 0;
 
@@ -70,7 +70,12 @@ uint32_t decode(huffman_node* root, uint8_t* comp_buf, uint32_t comp_buf_size, u
             curr_node = bit ? curr_node->right : curr_node->left;
 
             if (curr_node->left == NULL && curr_node->right == NULL) {
-                uncomp_buf[uncomp_buf_idx++] = curr_node->symbol;
+                if (uncomp_buf_idx < max_uncomp_size) {
+                    uncomp_buf[uncomp_buf_idx++] = curr_node->symbol;
+                } else {
+                    DEBUG("Decode: Buffer overflow avoided!");
+                    return uncomp_buf_idx;
+                }
                 curr_node = root;
             }
         }
@@ -80,7 +85,7 @@ uint32_t decode(huffman_node* root, uint8_t* comp_buf, uint32_t comp_buf_size, u
 }
 
 int huffman_master(MPI_File out_fp, uint64_t chunks_num) {
-    uint32_t global_freqs[256];
+    uint32_t global_freqs[256] = {0};
     MPI_Status status;
 
     DEBUG("Master starting: waiting for global frequencies");
@@ -202,6 +207,7 @@ int huffman_worker(MPI_File in_fp, MPI_File out_fp, MPI_Comm worker_comm,
     uint8_t** chunk_bufs = chunks_per_process > 0 ? calloc(chunks_per_process, sizeof(uint8_t*)) : NULL;
     uint32_t* compressed_sizes = chunks_per_process > 0 ? calloc(chunks_per_process, sizeof(uint32_t)) : NULL;
     uint32_t local_freqs[256] = {0};
+    huffman_node* root = NULL;
 
     if (chunks_per_process > 0 && (!chunk_bufs || !compressed_sizes)) {
         DEBUG_COMM(worker_comm, "Worker failed to allocate buffers (NULL)");
@@ -260,7 +266,7 @@ int huffman_worker(MPI_File in_fp, MPI_File out_fp, MPI_Comm worker_comm,
 
     DEBUG_COMM(worker_comm, "about to create a huffman tree");
 
-    huffman_node* root = create_huffman_tree(global_freqs);
+    root = create_huffman_tree(global_freqs);
     if (!root) {
         DEBUG_COMM(worker_comm, "Worker failed to create Huffman tree (NULL)");
         goto exit;
@@ -379,6 +385,7 @@ int huffman_worker(MPI_File in_fp, MPI_File out_fp, MPI_Comm worker_comm,
     ec = EXIT_SUCCESS;
     if (chunks_per_process > 0) free(size_send_reqs);
 exit:
+    free_huffman_tree(root);
     if (chunk_bufs) {
         for (uint32_t i = 0; i < chunks_per_process; i++) if (chunk_bufs[i]) free(chunk_bufs[i]);
         free(chunk_bufs);
@@ -407,19 +414,20 @@ int huffman_compress(MPI_File in_fp, MPI_File out_fp, int world_size, int world_
 }
 
 int huffman_decompress(MPI_File in_fp, MPI_File out_fp, int world_size, int world_rank) {
-    uint32_t freqs[256];
+    uint32_t freqs[256] = {0};
+    huffman_node* root = NULL;
     if (read_table(in_fp, freqs) != EXIT_SUCCESS) {
         DEBUG("Decompress: Failed to read frequency table");
         return EXIT_FAILURE;
     }
     DEBUG("Decompress: Frequency table read successfully");
 
-    huffman_node* root = create_huffman_tree(freqs);
+    root = create_huffman_tree(freqs);
 
     uint32_t chunks_num;
     if (MPI_File_read(in_fp, &chunks_num, 1, MPI_UINT32_T, MPI_STATUS_IGNORE) != MPI_SUCCESS) {
         DEBUG("Decompress: Failed to read amount of chunks");
-        return EXIT_FAILURE;
+        goto exit;
     }
     DEBUG("Decompress: Total chunks to process: %u", chunks_num);
 
@@ -479,7 +487,7 @@ int huffman_decompress(MPI_File in_fp, MPI_File out_fp, int world_size, int worl
 
         uint8_t uncompressed_buffer[CHUNK_SIZE];
 
-        uint32_t actual_size = decode(root, compressed_buffer, chunks_sizes[i], uncompressed_buffer);
+        uint32_t actual_size = decode(root, compressed_buffer, chunks_sizes[i], uncompressed_buffer, CHUNK_SIZE);
 
         MPI_Offset write_offset = (start_chunk + i) * CHUNK_SIZE;
         DEBUG("Decompress: Writing uncompressed chunk %u (global idx %lu) of length %u to offset %lld", i, start_chunk + i, actual_size, write_offset);
@@ -497,6 +505,7 @@ int huffman_decompress(MPI_File in_fp, MPI_File out_fp, int world_size, int worl
     DEBUG("Decompress: Routine finished successfully on rank %d", world_rank);
     ec = EXIT_SUCCESS;
 exit:
+    free_huffman_tree(root);
     free(chunks_sizes);
     return ec;
 }

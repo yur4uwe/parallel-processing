@@ -26,6 +26,12 @@ void generate_codebook(char cdb[256][512], huffman_node* curr_node,
 huffman_node* create_huffman_tree(uint32_t freqs[256]);
 
 /**
+ * Frees the Huffman tree.
+ * @param root The root of the Huffman tree.
+ */
+void free_huffman_tree(huffman_node* root);
+
+/**
  * Counts frequencies of symbols in a buffer.
  * Does NOT memset the freqs table, allowing for accumulation.
  * @param freqs The frequency table to update.

@@ -55,6 +55,10 @@ int main(int argc, char* argv[]) {
 
     DEBUG("Opened output file, about to execute in %d", hfmn_args->mode);
 
+    double start_time, end_time;
+    MPI_Barrier(MPI_COMM_WORLD);
+    start_time = MPI_Wtime();
+
     if (hfmn_args->mode == MODE_COMPRESS) {
         ec = huffman_compress(in_fp, out_fp, size, rank);
     } else if (hfmn_args->mode == MODE_DECOMPRESS) {
@@ -63,6 +67,13 @@ int main(int argc, char* argv[]) {
         DEBUG("unrecognized mode of execution returning EXIT_FAILURE");
         ec = EXIT_FAILURE;
         printf("unrecognized mode\n");
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    end_time = MPI_Wtime();
+
+    if (rank == 0 && ec == EXIT_SUCCESS) {
+        printf("TIME: %f\n", end_time - start_time);
     }
 
     DEBUG("Executed %d mode exit code: %d", hfmn_args->mode, ec);

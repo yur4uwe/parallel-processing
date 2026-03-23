@@ -225,7 +225,9 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
 
     generate_codebook(codebook, root, curr_code, 0);
 
-    return encode(codebook, in_fp, out_fp);
+    int ec = encode(codebook, in_fp, out_fp);
+    free_huffman_tree(root);
+    return ec;
 }
 
 int huffman_decompress(FILE* in_fp, FILE* out_fp) {
@@ -237,5 +239,7 @@ int huffman_decompress(FILE* in_fp, FILE* out_fp) {
 
     huffman_node* root = create_huffman_tree(freqs);
 
-    return decode(root, in_fp, out_fp);
+    int ec = decode(root, in_fp, out_fp);
+    free_huffman_tree(root);
+    return ec;
 }

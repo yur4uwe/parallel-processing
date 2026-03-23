@@ -1,2 +1,4 @@
 failed_test/
+benchmarks/
 performance.csv
+.venv/

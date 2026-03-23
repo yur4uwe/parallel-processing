@@ -66,6 +66,13 @@ huffman_node* create_huffman_tree(uint32_t freqs[256]) {
     return root;
 }
 
+void free_huffman_tree(huffman_node* root) {
+    if (root == NULL) return;
+    free_huffman_tree(root->left);
+    free_huffman_tree(root->right);
+    free(root);
+}
+
 void count_freqs_buf(uint32_t freqs[256], const uint8_t* buf, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         freqs[buf[i]]++;

@@ -36,6 +36,30 @@ is_valid_variant() {
     return 1
 }
 
+# Main script logic
+target="${1:-all}"
+shift 1 || true # Consume target
+
+# Optional: Set CHUNK_SIZE if provided as second argument
+CUSTOM_CHUNK_SIZE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --chunk-size)
+            CUSTOM_CHUNK_SIZE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+CFLAGS="-Wall -Wextra -O3"
+if [ -n "$CUSTOM_CHUNK_SIZE" ]; then
+    CFLAGS="$CFLAGS -DCHUNK_SIZE=$CUSTOM_CHUNK_SIZE"
+    echo -e "${YELLOW}Using custom CHUNK_SIZE: $CUSTOM_CHUNK_SIZE${NC}"
+fi
+
 build_util() {
     local util="$1"
     local output
@@ -55,7 +79,7 @@ build_util() {
 
     echo -e "${BLUE}Building $util utility...${NC}"
 
-    if gcc -Wall -Wextra -O3 "$util.c" -o "$output" -lm 2>&1; then
+    if gcc $CFLAGS "$util.c" -o "$output" -lm 2>&1; then
         echo -e "${GREEN}✓ $util compiled successfully${NC}"
         echo -e "  ${YELLOW}Output: $output${NC}"
         return 0
@@ -88,7 +112,7 @@ build() {
 
     echo -e "${BLUE}Building $variant huffman...${NC}"
 
-    if mpicc -Wall -Wextra -O2 $sources -o "$output" -lm 2>&1; then
+    if mpicc $CFLAGS $sources -o "$output" -lm 2>&1; then
         echo -e "${GREEN}✓ $variant huffman compiled successfully${NC}"
         echo -e "  ${YELLOW}Output: $output${NC}"
         return 0
@@ -137,16 +161,17 @@ Commands:
   clean            Remove build artifacts
   help             Show this message
 
+Options:
+  --chunk-size VAL Set custom CHUNK_SIZE (in bytes)
+
 Examples:
   $0                 # Build all variants
   $0 serial          # Build serial variant only
+  $0 parallel --chunk-size 131072
   $0 clean           # Clean build artifacts
 
 EOF
 }
-
-# Main script logic
-target="${1:-all}"
 
 case "$target" in
     help|-h|--help)

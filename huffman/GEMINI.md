@@ -41,16 +41,21 @@ This is university project so requirements are mandatory for completition
 ## Parallel Implementation Strategy: Static Partitioning
 Because every chunk is exactly 64 KB (except potentially the last one), the total number of chunks can be calculated from the file size. These chunks are divided evenly among the worker processes using a static mathematical formula based on the worker's rank. 
 
-This approach minimizes communication overhead for work distribution and simplifies building the **Chunk Size Table**.
+### Detailed MPI Usage and Rationale
+1. **Communicators (`MPI_Comm_split`):**
+   - Splits `MPI_COMM_WORLD` into a Master (Rank 0) and a Worker pool (Ranks 1-N). This allows workers to perform collective operations independently.
 
-### Satisfying Mandatory MPI Requirements
-1. **Process Groups & Communicators (`MPI_Comm_split` / `MPI_Group`):**
-   - Split `MPI_COMM_WORLD` into two communicators: **Worker Comm** (Ranks 1-N) and **Master Comm** (Rank 0).
-   - The **Worker Comm** allows for collective operations without involving the Master.
-2. **Collectives (`MPI_Allreduce`):**
-   - Workers use `MPI_Allreduce` on the **Worker Comm** to sum up their local frequency tables into a global table.
-   - This ensures all workers have the exact same data to build the Huffman tree independently (Zero-Communication Tree Building).
-3. **Non-blocking Exchanges (`MPI_Isend` / `MPI_Irecv`):**
-   - **Frequency Table Handoff:** A designated worker (e.g., Worker Rank 0) uses `MPI_Isend` to send the finalized global frequency table to the Master (Rank 0) on `MPI_COMM_WORLD`.
-   - **Chunk Size Gathering:** After compression, workers use `MPI_Isend` to send their compressed chunk size arrays to the Master.
-   - The Master uses `MPI_Irecv` to gather metadata (frequency table and chunk sizes) asynchronously.
+2. **Parallel I/O (MPI-IO):**
+   - **`MPI_File_read_at` / `MPI_File_write_at`**: Used for random-access parallel I/O. Workers read original chunks and write compressed bitstreams at calculated offsets without a shared file pointer, maximizing throughput.
+
+3. **Collectives (Blocking):**
+   - **`MPI_Allreduce`**: Synchronizes frequency tables across all workers. Blocking is necessary as tree construction depends on the global table.
+   - **`MPI_Bcast`**: Master sends the finalized header size to workers. Blocking ensures workers have the correct base offset before writing.
+   - **`MPI_Exscan`**: Calculates global write offsets for each worker based on the variable sizes of compressed chunks. Blocking ensures consistent file structure.
+
+4. **Non-blocking Exchanges (`MPI_Isend` / `MPI_Irecv`):**
+   - **Frequency Table Handoff**: Worker 0 sends the global table to the Master. Non-blocking allows the worker to start compression immediately.
+   - **Metadata Gathering**: Workers send compressed chunk sizes to the Master asynchronously as they finish. The Master uses multiple `MPI_Irecv` calls to gather this metadata without becoming a bottleneck, effectively overlapping communication with the compute-heavy compression phase.
+
+5. **Custom Datatypes:**
+   - **`MPI_Type_create_struct`**: Used to serialize the `freq_entry` struct for consistent file I/O.
