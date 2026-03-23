@@ -10,6 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 VARIANTS=(serial parallel)
+UTILS=(gen_from_freq extract-freq-table)
 BUILD_DIR="bin"
 
 # Create bin directory if it doesn't exist
@@ -26,7 +27,42 @@ is_valid_variant() {
         fi
     done
 
+    for util in "${UTILS[@]}"; do
+        if [ "$util" == "$1" ]; then
+            return 0
+        fi
+    done
+
     return 1
+}
+
+build_util() {
+    local util="$1"
+    local output
+
+    case "$util" in
+        gen_from_freq)
+            output="$BUILD_DIR/gen_from_freq"
+            ;;
+        extract-freq-table)
+            output="$BUILD_DIR/eft"
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown util '$util'${NC}"
+            return 1
+            ;;
+    esac
+
+    echo -e "${BLUE}Building $util utility...${NC}"
+
+    if gcc -Wall -Wextra -O3 "$util.c" -o "$output" -lm 2>&1; then
+        echo -e "${GREEN}✓ $util compiled successfully${NC}"
+        echo -e "  ${YELLOW}Output: $output${NC}"
+        return 0
+    else
+        echo -e "${RED}✗ Failed to compile $util${NC}"
+        return 1
+    fi
 }
 
 build() {
@@ -67,6 +103,10 @@ build_all() {
 
     build serial || ((failed++))
     build parallel || ((failed++))
+    
+    for util in "${UTILS[@]}"; do
+        build_util "$util" || ((failed++))
+    done
 
     if [ $failed -eq 0 ]; then
         echo -e "${GREEN}All builds completed successfully!${NC}"
@@ -79,7 +119,7 @@ build_all() {
 
 clean() {
     echo -e "${BLUE}Cleaning build artifacts...${NC}"
-    rm -f "$BUILD_DIR"/huffman-*
+    rm -f "$BUILD_DIR"/huffman-* "$BUILD_DIR"/gen_from_freq "$BUILD_DIR"/eft
     echo -e "${GREEN}✓ Cleaned${NC}"
 }
 
@@ -90,9 +130,10 @@ ${BLUE}Huffman Algorithm Build Script${NC}
 Usage: $0 [COMMAND] [OPTIONS]
 
 Commands:
-  all              Build all variants (serial, parallel) [default]
+  all              Build all variants and utilities [default]
   serial           Build serial variant only
   parallel         Build parallel variant only
+  utils            Build utility tools (gen_from_freq, eft)
   clean            Remove build artifacts
   help             Show this message
 
@@ -121,6 +162,11 @@ case "$target" in
         ;;
     parallel)
         build parallel
+        ;;
+    utils)
+        for util in "${UTILS[@]}"; do
+            build_util "$util"
+        done
         ;;
     all)
         build_all

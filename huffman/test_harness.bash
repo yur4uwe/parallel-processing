@@ -78,6 +78,14 @@ fi
 generate_test_files() {
     print_header "Generating Test Files"
     
+    # Source for natural text generation
+    local src_text="test/input-encode/test_big.txt"
+    local gen_tool="bin/gen_from_freq"
+    local use_gen=false
+    if [ -f "$src_text" ] && [ -f "$gen_tool" ]; then
+        use_gen=true
+    fi
+
     # Empty file
     touch "$GEN_DIR/empty.txt"
     echo -e "${GREEN}✓${NC} Generated empty.txt"
@@ -85,29 +93,52 @@ generate_test_files() {
     # Single byte
     echo -n "A" > "$GEN_DIR/single_byte.txt"
     echo -e "${GREEN}✓${NC} Generated single_byte.txt"
-    
-    # Repeated character (100KB)
-    head -c 100000 /dev/zero | tr '\0' 'A' > "$GEN_DIR/repeated_100k.txt"
+
+    # One symbol (many times)
+    echo -n "A" > "$TEMP_DIR/one_A.txt"
+    if [ "$use_gen" = true ]; then
+        $gen_tool "$TEMP_DIR/one_A.txt" 100000 "$GEN_DIR/repeated_100k.txt"
+    else
+        head -c 100000 /dev/zero | tr '\0' 'A' > "$GEN_DIR/repeated_100k.txt"
+    fi
     echo -e "${GREEN}✓${NC} Generated repeated_100k.txt"
     
-    # Exactly 1 chunk (65,536 bytes) - using random data for complexity
-    head -c 65536 /dev/urandom > "$GEN_DIR/exactly_1_chunk.txt"
+    # Exactly 1 chunk (65,536 bytes)
+    if [ "$use_gen" = true ]; then
+        $gen_tool "$src_text" 65536 "$GEN_DIR/exactly_1_chunk.txt"
+    else
+        head -c 65536 /dev/urandom > "$GEN_DIR/exactly_1_chunk.txt"
+    fi
     echo -e "${GREEN}✓${NC} Generated exactly_1_chunk.txt"
     
     # 1 chunk + 1 byte (65,537 bytes)
-    head -c 65537 /dev/urandom > "$GEN_DIR/1_chunk_plus_1.txt"
+    if [ "$use_gen" = true ]; then
+        $gen_tool "$src_text" 65537 "$GEN_DIR/1_chunk_plus_1.txt"
+    else
+        head -c 65537 /dev/urandom > "$GEN_DIR/1_chunk_plus_1.txt"
+    fi
     echo -e "${GREEN}✓${NC} Generated 1_chunk_plus_1.txt"
     
-    # Large random binary file (1MB)
+    # Large random binary file (1MB) - Keep urandom for "uncompressible" case
     head -c 1048576 /dev/urandom > "$GEN_DIR/large_random_1MB.txt"
     echo -e "${GREEN}✓${NC} Generated large_random_1MB.txt"
     
-    # Large text file (Book equivalent) ~ 2MB
-    # We repeat a couple of sentences to get good compression
-    local sentence="This is a test sentence designed to be repeated multiple times to simulate a text file with a decent compression ratio. It contains various characters and words. "
-    local reps=15000 # ~ 2.4 MB
-    awk -v s="$sentence" -v r="$reps" 'BEGIN {for(i=0;i<r;i++) printf "%s", s;}' > "$GEN_DIR/large_book_sim.txt"
-    echo -e "${GREEN}✓${NC} Generated large_book_sim.txt"
+    # Large natural text file (Book equivalent) ~ 2MB
+    if [ "$use_gen" = true ]; then
+        $gen_tool "$src_text" 2097152 "$GEN_DIR/large_book_sim.txt"
+        $gen_tool "$src_text" 10485760 "$GEN_DIR/natural_10MB.txt"
+        $gen_tool "$src_text" 52428800 "$GEN_DIR/natural_50MB.txt"
+        $gen_tool "$src_text" 104857600 "$GEN_DIR/natural_100MB.txt"
+    else
+        local sentence="This is a test sentence designed to be repeated multiple times to simulate a text file with a decent compression ratio. It contains various characters and words. "
+        local reps=15000 # ~ 2.4 MB
+        awk -v s="$sentence" -v r="$reps" 'BEGIN {for(i=0;i<r;i++) printf "%s", s;}' > "$GEN_DIR/large_book_sim.txt"
+        # Fallback for large files if tool is missing (less realistic but provides size)
+        head -c 10485760 /dev/urandom > "$GEN_DIR/natural_10MB.txt"
+        head -c 52428800 /dev/urandom > "$GEN_DIR/natural_50MB.txt"
+        head -c 104857600 /dev/urandom > "$GEN_DIR/natural_100MB.txt"
+    fi
+    echo -e "${GREEN}✓${NC} Generated natural text files (2MB, 10MB, 50MB, 100MB)"
     
     # Copy existing files to GEN_DIR for unified processing
     if [ -d "$TEST_DIR/input-encode" ]; then
