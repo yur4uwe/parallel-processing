@@ -5,5 +5,5 @@
 #include <stdlib.h>
 #include <mpi.h>
 
-int write_table(MPI_File output, uint32_t freq[256]);
-int read_table(MPI_File input, uint32_t freq[256]);
+int write_table_at(MPI_File output, MPI_Offset offset, uint32_t freq[256], MPI_Offset* next_offset);
+int read_table_at(MPI_File input, MPI_Offset offset, uint32_t freq[256], MPI_Offset* next_offset);

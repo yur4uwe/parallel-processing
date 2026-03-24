@@ -152,10 +152,10 @@ def benchmark():
                                         "core_time_s": core_time,
                                         "total_time_s": wall_time,
                                         "overhead_s": wall_time - core_time,
-                                        "core_throughput_mbs": (size_kb // 1024)
-                                        / core_time,
-                                        "total_throughput_mbs": (size_kb // 1024)
-                                        / wall_time,
+                                        "core_throughput_mbs": (size_kb / 1024.0)
+                                        / core_time if core_time > 0 else 0,
+                                        "total_throughput_mbs": (size_kb / 1024.0)
+                                        / wall_time if wall_time > 0 else 0,
                                     }
                                 )
                             else:

@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-CFLAGS="-Wall -Wextra -O3"
+CFLAGS="-Wall -Wextra -O3 -std=gnu99"
 if [ -n "$CUSTOM_CHUNK_SIZE" ]; then
     CFLAGS="$CFLAGS -DCHUNK_SIZE=$CUSTOM_CHUNK_SIZE"
     echo -e "${YELLOW}Using custom CHUNK_SIZE: $CUSTOM_CHUNK_SIZE${NC}"

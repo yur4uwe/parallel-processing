@@ -5,7 +5,6 @@
 
 #include "../consts.h"
 #include "../huffman-common.h"
-#include "../min-heap.h"
 #include "freq-table.h"
 
 void count_freq(uint32_t freqs[256], FILE* fp) {
@@ -220,7 +219,7 @@ int huffman_compress(FILE* in_fp, FILE* out_fp) {
 
     huffman_node* root = create_huffman_tree(freqs);
 
-    char codebook[256][512] = {0};
+    char codebook[256][512] = {{0}};
     char curr_code[512];
 
     generate_codebook(codebook, root, curr_code, 0);

@@ -300,72 +300,6 @@ test_compression_ratio() {
     done
 }
 
-test_performance_csv() {
-    print_header "Performance Tests (CSV Generation)"
-    
-    local csv_file="performance.csv"
-    echo "File,Variant,NP,Encode Time (ms),Decode Time (ms)" > "$csv_file"
-    
-    for input in "$GEN_DIR"/*.txt; do
-        local filename=$(basename "$input")
-        echo "Testing $filename..."
-        
-        # Serial
-        local s_bin="$BIN_DIR/huffman-serial"
-        if [ -f "$s_bin" ]; then
-            local s_out="$TEMP_DIR/perf_s_${filename}.huff"
-            local s_dec="$TEMP_DIR/perf_s_${filename}_dec.txt"
-            
-            # Use date to get milliseconds timestamp, fallback to seconds if needed
-            local s_start_c=$(date +%s%3N 2>/dev/null || date +%s)
-            if $s_bin -c "$input" "$s_out" > /dev/null 2>&1; then
-                local s_end_c=$(date +%s%3N 2>/dev/null || date +%s)
-                local s_enc_time=$((s_end_c - s_start_c))
-                
-                local s_start_d=$(date +%s%3N 2>/dev/null || date +%s)
-                if $s_bin -d "$s_out" "$s_dec" > /dev/null 2>&1; then
-                    local s_end_d=$(date +%s%3N 2>/dev/null || date +%s)
-                    local s_dec_time=$((s_end_d - s_start_d))
-                    echo "$filename,serial,1,$s_enc_time,$s_dec_time" >> "$csv_file"
-                else
-                    echo "$filename,serial,1,$s_enc_time,FAIL" >> "$csv_file"
-                fi
-            else
-                echo "$filename,serial,1,FAIL,FAIL" >> "$csv_file"
-            fi
-        fi
-        
-        # Parallel
-        local p_bin="$BIN_DIR/huffman-parallel"
-        if [ -f "$p_bin" ]; then
-            for np in "${NP_LIST[@]}"; do
-                if [ "$np" -lt 2 ]; then continue; fi
-                local p_out="$TEMP_DIR/perf_p_${np}_${filename}.huff"
-                local p_dec="$TEMP_DIR/perf_p_${np}_${filename}_dec.txt"
-                local p_cmd="mpirun -n $np $p_bin"
-                
-                local p_start_c=$(date +%s%3N 2>/dev/null || date +%s)
-                if $p_cmd -c "$input" "$p_out" > /dev/null 2>&1; then
-                    local p_end_c=$(date +%s%3N 2>/dev/null || date +%s)
-                    local p_enc_time=$((p_end_c - p_start_c))
-                    
-                    local p_start_d=$(date +%s%3N 2>/dev/null || date +%s)
-                    if $p_cmd -d "$p_out" "$p_dec" > /dev/null 2>&1; then
-                        local p_end_d=$(date +%s%3N 2>/dev/null || date +%s)
-                        local p_dec_time=$((p_end_d - p_start_d))
-                        echo "$filename,parallel,$np,$p_enc_time,$p_dec_time" >> "$csv_file"
-                    else
-                        echo "$filename,parallel,$np,$p_enc_time,FAIL" >> "$csv_file"
-                    fi
-                else
-                    echo "$filename,parallel,$np,FAIL,FAIL" >> "$csv_file"
-                fi
-            done
-        fi
-    done
-    echo -e "${GREEN}✓${NC} Performance results saved to ${CYAN}$csv_file${NC}"
-}
-
 show_usage() {
     cat << EOF
 ${BLUE}Huffman Compression Test Harness (Robust Pure Round-Trip)${NC}
@@ -376,7 +310,6 @@ Commands:
   all               Run all tests (round-trip, ratio, performance)
   roundtrip         Run dynamic round-trip correctness tests
   ratio             Show compression ratio analysis on large text
-  perf-csv          Run performance benchmark and generate performance.csv
   help              Show this message
 
 Options:
@@ -387,7 +320,6 @@ Options:
 Examples:
   $0 roundtrip
   $0 all -n "2 4 8"
-  $0 perf-csv
 EOF
 }
 
@@ -404,15 +336,10 @@ case "$target" in
         generate_test_files
         test_compression_ratio
         ;;
-    perf-csv)
-        generate_test_files
-        test_performance_csv
-        ;;
     all)
         generate_test_files
         test_roundtrip || true # Continue even if round-trip fails
         test_compression_ratio
-        test_performance_csv
         ;;
     *)
         echo -e "${RED}Error: Unknown command '$target'${NC}"

@@ -16,10 +16,14 @@ def load_data(csv_path: str) -> pd.DataFrame:
         sys.exit(1)
     df = pd.read_csv(csv_path)
     # Ensure numeric types
-    df["input_size_mb"] = pd.to_numeric(df["input_size_mb"], errors="coerce")
+    df["input_size_kb"] = pd.to_numeric(df["input_size_kb"], errors="coerce")
     df["chunk_size_bytes"] = pd.to_numeric(df["chunk_size_bytes"], errors="coerce")
-    df["core_throughput_mbs"] = pd.to_numeric(df["core_throughput_mbs"], errors="coerce")
-    df["total_throughput_mbs"] = pd.to_numeric(df["total_throughput_mbs"], errors="coerce")
+    df["core_throughput_mbs"] = pd.to_numeric(
+        df["core_throughput_mbs"], errors="coerce"
+    )
+    df["total_throughput_mbs"] = pd.to_numeric(
+        df["total_throughput_mbs"], errors="coerce"
+    )
     df["overhead_s"] = pd.to_numeric(df.get("overhead_s", 0), errors="coerce")
     return cast(pd.DataFrame, df)
 
@@ -33,42 +37,44 @@ def plot_throughput_scaling(df: pd.DataFrame, output_dir: str) -> None:
         subset = pd.DataFrame(subset)
 
     # Calculate averages for line plot
-    grouped = subset.groupby(["type", "mpi_processes", "mode", "input_size_mb"])
-    avg_df = grouped.agg({"core_throughput_mbs": "mean", "total_throughput_mbs": "mean"}).reset_index()
+    grouped = subset.groupby(["type", "mpi_processes", "mode", "input_size_kb"])
+    avg_df = grouped.agg(
+        {"core_throughput_mbs": "mean", "total_throughput_mbs": "mean"}
+    ).reset_index()
     if not isinstance(avg_df, pd.DataFrame):
         avg_df = pd.DataFrame(avg_df)
 
-    for size in avg_df["input_size_mb"].unique():
-        size_df = avg_df[avg_df["input_size_mb"] == size]
+    for size in avg_df["input_size_kb"].unique():
+        size_df = avg_df[avg_df["input_size_kb"] == size]
         if not isinstance(size_df, pd.DataFrame):
             size_df = pd.DataFrame(size_df)
 
         _ = plt.figure()
-        
+
         # Separate serial baseline
         serial_comp_subset = size_df[
             (size_df["type"] == "serial") & (size_df["mode"] == "compress")
         ]["core_throughput_mbs"]
-        
+
         serial_decomp_subset = size_df[
             (size_df["type"] == "serial") & (size_df["mode"] == "decompress")
         ]["core_throughput_mbs"]
 
         # Parallel data
         parallel_df = size_df[size_df["type"] == "parallel"]
-        
+
         if not parallel_df.empty:
             # Melt the parallel data to distinguish Core vs Total in a Seaborn-idiomatic way
             melted_df = parallel_df.melt(
                 id_vars=["mpi_processes", "mode"],
                 value_vars=["core_throughput_mbs", "total_throughput_mbs"],
                 var_name="Throughput Type",
-                value_name="MB/s"
+                value_name="MB/s",
             )
             # Rename for legend clarity
             type_map = {
                 "core_throughput_mbs": "Core",
-                "total_throughput_mbs": "Total (Inc. Init)"
+                "total_throughput_mbs": "Total (Inc. Init)",
             }
             melted_df["Throughput Type"] = melted_df["Throughput Type"].map(type_map)
 
@@ -79,22 +85,30 @@ def plot_throughput_scaling(df: pd.DataFrame, output_dir: str) -> None:
                 hue="mode",
                 style="Throughput Type",
                 markers=True,
-                dashes=True
+                dashes=True,
             )
 
         # Add serial baselines if they exist
         if isinstance(serial_comp_subset, pd.Series) and not serial_comp_subset.empty:
             val = float(serial_comp_subset.iloc[0])
-            _ = plt.axhline(y=val, color="blue", linestyle=":", label="Serial Compress Baseline")
-            
-        if isinstance(serial_decomp_subset, pd.Series) and not serial_decomp_subset.empty:
-            val = float(serial_decomp_subset.iloc[0])
-            _ = plt.axhline(y=val, color="orange", linestyle=":", label="Serial Decompress Baseline")
+            _ = plt.axhline(
+                y=val, color="blue", linestyle=":", label="Serial Compress Baseline"
+            )
 
-        _ = plt.title(f"Throughput Scaling (File Size: {size}MB, Chunk: {chunk_to_plot // 1024}KB)")
+        if (
+            isinstance(serial_decomp_subset, pd.Series)
+            and not serial_decomp_subset.empty
+        ):
+            val = float(serial_decomp_subset.iloc[0])
+            _ = plt.axhline(
+                y=val, color="orange", linestyle=":", label="Serial Decompress Baseline"
+            )
+
+        _ = plt.title(
+            f"Throughput Scaling (File Size: {size}MB, Chunk: {chunk_to_plot // 1024}KB)"
+        )
         _ = plt.xlabel("Number of Processes")
-        _ = plt.ylabel("Throughput (MB/s) [Log Scale]")
-        plt.yscale("log")
+        _ = plt.ylabel("Throughput (MB/s)")
         _ = plt.legend()
         _ = plt.savefig(os.path.join(output_dir, f"throughput_scaling_{size}mb.png"))
         plt.close()
@@ -117,7 +131,7 @@ def plot_impact_charts(df: pd.DataFrame, output_dir: str) -> None:
 
     # 2. File Size Impact
     _ = plt.figure()
-    _ = sns.boxplot(data=df, x="input_size_mb", y="core_throughput_mbs", hue="type")
+    _ = sns.boxplot(data=df, x="input_size_kb", y="core_throughput_mbs", hue="type")
     _ = plt.title("Impact of Input File Size on Throughput (Serial vs Parallel)")
     _ = plt.ylabel("Core Throughput (MB/s)")
     _ = plt.savefig(os.path.join(output_dir, "impact_file_size.png"))
