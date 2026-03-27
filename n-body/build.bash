@@ -14,26 +14,26 @@ Usage: $0 [COMMAND]
 
 Commands:
     json-runner   Build json runner utility only
+    test          Build and run json tests
     clean         Remove build artifacts
     help          Show this message
 EOF
 }
 
-build_json_runner() {
-    if gcc $CFLAGS json-runner.c json/json.c arena/arena.c -o "$BUILD_DIR/json-runner" -lm 2>&1; then
-        echo -e "${GREEN} json runner compiled successfully${NC}"
-        echo -e "  ${YELLOW}Output: $output${NC}"
-        return 0
+run_tests() {
+    if gcc $CFLAGS json_tests.c json/json.c arena/arena.c -o "$BUILD_DIR/json-tests" -lm 2>&1; then
+        echo "tests compiled successfully, running..."
+        ./"$BUILD_DIR/json-tests"
+        return $?
     else
-        echo -e "${RED} Failed to compile $util${NC}"
+        echo "Failed to compile tests"
         return 1
     fi
-
 }
 
 clean() {
-    echo -e "Cleaning build artifacts"
-    rm -f "$BUILD_DIR"/json-tester
+    echo "Cleaning build artifacts"
+    rm -rf "$BUILD_DIR"
 }
 
 case "$1" in
@@ -41,9 +41,9 @@ case "$1" in
         show_usage
         exit 0
         ;;
-    json-runner)
-        build_json_runner
-        exit 0
+    test)
+        run_tests
+        exit $?
         ;;
     clean)
         clean
