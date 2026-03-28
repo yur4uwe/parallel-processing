@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+LC_NUMERIC=C
 BUILD_DIR="bin"
 
 mkdir -p $BUILD_DIR
@@ -23,8 +24,16 @@ EOF
 run_tests() {
     if gcc $CFLAGS json_tests.c json/json.c arena/arena.c -o "$BUILD_DIR/json-tests" -lm 2>&1; then
         echo "tests compiled successfully, running..."
+        
+        start=$(date +%s.%N)
         ./"$BUILD_DIR/json-tests"
-        return $?
+        exit_code=$?
+        end=$(date +%s.%N)
+
+        duration=$(echo "$end - $start" | bc)
+        printf "Execution time: %.6f seconds\n" "$duration"
+
+        return $exit_code
     else
         echo "Failed to compile tests"
         return 1

@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "arena/arena.h"
 #include "json/json.h"
@@ -14,9 +14,9 @@ int test_basic_object() {
     char* json = "{\"key\": 123}";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    JSON_ASSERT(val != NULL, "Failed to parse basic object");
     JSON_ASSERT_OBJECT(val, 1, "Should be object with 1 key");
-    JSON_ASSERT(strcmp((char*)val->u.object.keys[0], "key") == 0, "Key name mismatch");
+    JSON_ASSERT_NAME(val->u.object.keys[0], "key",
+                "Key name mismatch");
     JSON_ASSERT_NUMBER(val->u.object.values[0], 123.0, "Value mismatch");
 
     free_arena(a);
@@ -33,7 +33,6 @@ int test_basic_array() {
     char* json = "[1, true, \"hello\", null]";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    JSON_ASSERT(val != NULL, "Failed to parse basic array");
     JSON_ASSERT_ARRAY(val, 4, "Should be array with 4 elements");
     JSON_ASSERT_NUMBER(val->u.array.elements[0], 1.0, "Element 0 mismatch");
     JSON_ASSERT_BOOL(val->u.array.elements[1], true, "Element 1 mismatch");
@@ -54,7 +53,6 @@ int test_nested_structure() {
     char* json = "{\"obj\": {\"a\": [1, 2]}, \"arr\": [{}, 3]}";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    JSON_ASSERT(val != NULL, "Failed to parse nested structure");
     JSON_ASSERT_OBJECT(val, 2, "Should have 2 keys");
 
     // Check "obj"
@@ -76,9 +74,15 @@ assert_failed:
 int test_malformed_json() {
     Arena* a = new_arena(1024);
     char error_buf[70];
-    char* cases[] = {
-        "{",         "}",   "[1, 2", "{\"key\": }", "{\"key\" 123}",
-        "truefalse", "[,]", "{\"key\": 123, \"key\": 123}", NULL};
+    char* cases[] = {"{",
+                     "}",
+                     "[1, 2",
+                     "{\"key\": }",
+                     "{\"key\" 123}",
+                     "truefalse",
+                     "[,]",
+                     "{\"key\": 123, \"key\": 123}",
+                     NULL};
 
     for (int i = 0; cases[i] != NULL; i++) {
         json_value* val = parse_json(a, (uint8_t*)cases[i], strlen(cases[i]));
