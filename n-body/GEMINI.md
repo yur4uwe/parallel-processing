@@ -136,3 +136,25 @@ Run with varying N and measure wall time per step:
 - 3-body and N-body have no closed-form analytical solution, only numerical approximation via time stepping.
 - Physical accuracy is not a goal — correctness means stable simulation without explosions.
 - **CUDA API for Go:** Available via `cgo`, but this project remains in C for better alignment with CUDA patterns and low-level control.
+
+## Coding Conventions
+
+### JSON Assertions
+The project uses specialized macros in `json/json.h` for validating JSON structures. To use these macros, the calling function **must** follow this pattern:
+1. Define an integer error code variable: `int ec = EXIT_SUCCESS;`
+2. Provide a label for failure handling: `assert_failed:`
+3. Ensure `assert_failed:` performs necessary resource cleanup and returns `ec`.
+
+Example:
+```c
+int my_function() {
+    int ec = EXIT_SUCCESS;
+    // ...
+    JSON_ASSERT_TYPE(val, JSON_OBJECT, "Expected object");
+    return EXIT_SUCCESS;
+
+assert_failed:
+    // cleanup
+    return ec;
+}
+```

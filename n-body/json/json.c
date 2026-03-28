@@ -158,14 +158,14 @@ json_value* parse_value(Arena* a, uint8_t* json_str, size_t* pos,
 void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len);
 
 void skip_json_string(uint8_t* json_str, size_t* pos, uint64_t str_len) {
-    (*pos)++; // skip opening quote
+    (*pos)++;  // skip opening quote
     while (*pos < str_len && json_str[*pos] != '"') {
         if (json_str[*pos] == '\\') {
             (*pos)++;
         }
         (*pos)++;
     }
-    if (*pos < str_len) (*pos)++; // skip closing quote
+    if (*pos < str_len) (*pos)++;  // skip closing quote
 }
 
 void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
@@ -178,10 +178,16 @@ void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
             int depth = 1;
             while (*pos < str_len && depth > 0) {
                 skip_whitespace(json_str, pos);
-                if (json_str[*pos] == '"') skip_json_string(json_str, pos, str_len);
-                else if (json_str[*pos] == '{') { depth++; (*pos)++; }
-                else if (json_str[*pos] == '}') { depth--; (*pos)++; }
-                else (*pos)++;
+                if (json_str[*pos] == '"')
+                    skip_json_string(json_str, pos, str_len);
+                else if (json_str[*pos] == '{') {
+                    depth++;
+                    (*pos)++;
+                } else if (json_str[*pos] == '}') {
+                    depth--;
+                    (*pos)++;
+                } else
+                    (*pos)++;
             }
             break;
         }
@@ -190,10 +196,16 @@ void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
             int depth = 1;
             while (*pos < str_len && depth > 0) {
                 skip_whitespace(json_str, pos);
-                if (json_str[*pos] == '"') skip_json_string(json_str, pos, str_len);
-                else if (json_str[*pos] == '[') { depth++; (*pos)++; }
-                else if (json_str[*pos] == ']') { depth--; (*pos)++; }
-                else (*pos)++;
+                if (json_str[*pos] == '"')
+                    skip_json_string(json_str, pos, str_len);
+                else if (json_str[*pos] == '[') {
+                    depth++;
+                    (*pos)++;
+                } else if (json_str[*pos] == ']') {
+                    depth--;
+                    (*pos)++;
+                } else
+                    (*pos)++;
             }
             break;
         }
@@ -201,7 +213,9 @@ void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
             skip_json_string(json_str, pos, str_len);
             break;
         default:
-            while (*pos < str_len && !isspace(json_str[*pos]) && json_str[*pos] != ',' && json_str[*pos] != '}' && json_str[*pos] != ']') {
+            while (*pos < str_len && !isspace(json_str[*pos]) &&
+                   json_str[*pos] != ',' && json_str[*pos] != '}' &&
+                   json_str[*pos] != ']') {
                 (*pos)++;
             }
             break;
@@ -217,10 +231,10 @@ int count_object_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
     int count = 0;
     while (pos < str_len && json_str[pos] != '}') {
         count++;
-        skip_json_value(json_str, &pos, str_len); // skip key
+        skip_json_value(json_str, &pos, str_len);  // skip key
         skip_whitespace(json_str, &pos);
         if (json_str[pos] == ':') pos++;
-        skip_json_value(json_str, &pos, str_len); // skip value
+        skip_json_value(json_str, &pos, str_len);  // skip value
         skip_whitespace(json_str, &pos);
         if (json_str[pos] == ',') pos++;
         skip_whitespace(json_str, &pos);
@@ -296,14 +310,24 @@ parse_enter:
         if (buf_val == NULL) {
             return NULL;
         }
+        for (int i = 0; i < v->u.object.count; i++) {
+            if (strcmp((char*)buf_val->u.string, (char*)v->u.object.keys[i]) ==
+                EXIT_SUCCESS) {
+                printf("Duplicate keys '%s' and '%s'\n", buf_val->u.string,
+                       v->u.object.keys[i]);
+                return NULL;
+            }
+        }
         v->u.object.keys[v->u.object.count++] = buf_val->u.string;
         state = LOOKING_FOR_COLON;
         goto parse_enter;
     }
 
     if (state != PARSING_VALUE) {
-        printf("incorrect state, got %d, expected PARSING_VALUE(%d), active char: '%c'\n", state,
-               PARSING_VALUE, json_str[*pos]);
+        printf(
+            "incorrect state, got %d, expected PARSING_VALUE(%d), active char: "
+            "'%c'\n",
+            state, PARSING_VALUE, json_str[*pos]);
         return NULL;
     }
 

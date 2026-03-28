@@ -1,70 +1,61 @@
 #include <assert.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "arena/arena.h"
 #include "json/json.h"
-
-#define TEST_ASSERT(cond, msg)                    \
-    if (!(cond)) {                                \
-        printf("[FAIL] %s: %s\n", __func__, msg); \
-        return 0;                                 \
-    }
 
 typedef int (*test_func)();
 
 int test_basic_object() {
     Arena* a = new_arena(1024);
+    int ec = EXIT_SUCCESS;
     char* json = "{\"key\": 123}";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    TEST_ASSERT(val != NULL, "Failed to parse basic object");
-    TEST_ASSERT(val->type == JSON_OBJECT, "Value should be an object");
-    TEST_ASSERT(val->u.object.count == 1, "Object should have 1 key");
-    TEST_ASSERT(strcmp((char*)val->u.object.keys[0], "key") == 0,
-                "Key name mismatch");
-    TEST_ASSERT(val->u.object.values[0]->type == JSON_NUMBER,
-                "Value type mismatch");
-    TEST_ASSERT(val->u.object.values[0]->u.number == 123.0, "Value mismatch");
+    JSON_ASSERT(val != NULL, "Failed to parse basic object");
+    JSON_ASSERT_OBJECT(val, 1, "Should be object with 1 key");
+    JSON_ASSERT(strcmp((char*)val->u.object.keys[0], "key") == 0, "Key name mismatch");
+    JSON_ASSERT_NUMBER(val->u.object.values[0], 123.0, "Value mismatch");
 
     free_arena(a);
     return 1;
+
+assert_failed:
+    free_arena(a);
+    return 0;
 }
 
 int test_basic_array() {
     Arena* a = new_arena(1024);
+    int ec = EXIT_SUCCESS;
     char* json = "[1, true, \"hello\", null]";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    TEST_ASSERT(val != NULL, "Failed to parse basic array");
-    TEST_ASSERT(val->type == JSON_ARRAY, "Value should be an array");
-    TEST_ASSERT(val->u.array.count == 4, "Array should have 4 elements");
-    TEST_ASSERT(val->u.array.elements[0]->type == JSON_NUMBER,
-                "Element 0 type mismatch");
-    TEST_ASSERT(val->u.array.elements[1]->type == JSON_BOOL,
-                "Element 1 type mismatch");
-    TEST_ASSERT(val->u.array.elements[1]->u.boolean == true,
-                "Element 1 value mismatch");
-    TEST_ASSERT(val->u.array.elements[2]->type == JSON_STRING,
-                "Element 2 type mismatch");
-    TEST_ASSERT(strcmp((char*)val->u.array.elements[2]->u.string, "hello") == 0,
-                "Element 2 value mismatch");
-    TEST_ASSERT(val->u.array.elements[3]->type == JSON_NULL,
-                "Element 3 type mismatch");
+    JSON_ASSERT(val != NULL, "Failed to parse basic array");
+    JSON_ASSERT_ARRAY(val, 4, "Should be array with 4 elements");
+    JSON_ASSERT_NUMBER(val->u.array.elements[0], 1.0, "Element 0 mismatch");
+    JSON_ASSERT_BOOL(val->u.array.elements[1], true, "Element 1 mismatch");
+    JSON_ASSERT_STRING(val->u.array.elements[2], "hello", "Element 2 mismatch");
+    JSON_ASSERT_NULL(val->u.array.elements[3], "Element 3 should be null");
 
     free_arena(a);
     return 1;
+
+assert_failed:
+    free_arena(a);
+    return 0;
 }
 
 int test_nested_structure() {
     Arena* a = new_arena(4096);
+    int ec = EXIT_SUCCESS;
     char* json = "{\"obj\": {\"a\": [1, 2]}, \"arr\": [{}, 3]}";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    TEST_ASSERT(val != NULL, "Failed to parse nested structure");
-    TEST_ASSERT(val->type == JSON_OBJECT, "Should be object");
-    TEST_ASSERT(val->u.object.count == 2, "Should have 2 keys");
+    JSON_ASSERT(val != NULL, "Failed to parse nested structure");
+    JSON_ASSERT_OBJECT(val, 2, "Should have 2 keys");
 
     // Check "obj"
     json_value* obj_val = NULL;
@@ -72,11 +63,14 @@ int test_nested_structure() {
         if (strcmp((char*)val->u.object.keys[i], "obj") == 0)
             obj_val = val->u.object.values[i];
     }
-    TEST_ASSERT(obj_val != NULL && obj_val->type == JSON_OBJECT,
-                "Nested object mismatch");
+    JSON_ASSERT_OBJECT(obj_val, 1, "Nested object mismatch");
 
     free_arena(a);
     return 1;
+
+assert_failed:
+    free_arena(a);
+    return 0;
 }
 
 int test_malformed_json() {
@@ -84,12 +78,16 @@ int test_malformed_json() {
     char error_buf[70];
     char* cases[] = {
         "{",         "}",   "[1, 2", "{\"key\": }", "{\"key\" 123}",
-        "truefalse", "[,]", NULL};
+        "truefalse", "[,]", "{\"key\": 123, \"key\": 123}", NULL};
 
     for (int i = 0; cases[i] != NULL; i++) {
         json_value* val = parse_json(a, (uint8_t*)cases[i], strlen(cases[i]));
-        sprintf(error_buf, "Should have failed on '%s'\n", cases[i]);
-        TEST_ASSERT(val == NULL, error_buf);
+        sprintf(error_buf, "Should have failed on '%s'", cases[i]);
+        if (val != NULL) {
+            printf("[FAIL] %s: %s\n", __func__, error_buf);
+            free_arena(a);
+            return 0;
+        }
     }
 
     free_arena(a);
@@ -98,44 +96,43 @@ int test_malformed_json() {
 
 int test_empty_structures() {
     Arena* a = new_arena(1024);
+    int ec = EXIT_SUCCESS;
 
     json_value* obj = parse_json(a, (uint8_t*)"{}", 2);
-    TEST_ASSERT(
-        obj != NULL && obj->type == JSON_OBJECT && obj->u.object.count == 0,
-        "Empty object mismatch");
+    JSON_ASSERT_OBJECT(obj, 0, "Empty object mismatch");
 
     json_value* arr = parse_json(a, (uint8_t*)"[]", 2);
-    TEST_ASSERT(
-        arr != NULL && arr->type == JSON_ARRAY && arr->u.array.count == 0,
-        "Empty array mismatch");
+    JSON_ASSERT_ARRAY(arr, 0, "Empty array mismatch");
 
     free_arena(a);
     return 1;
+
+assert_failed:
+    free_arena(a);
+    return 0;
 }
 
 int test_values() {
     Arena* a = new_arena(1024);
+    int ec = EXIT_SUCCESS;
 
     char* json = "[0, -1, 3.14, true, false, null]";
     json_value* val = parse_json(a, (uint8_t*)json, strlen(json));
 
-    TEST_ASSERT(
-        val != NULL && val->type == JSON_ARRAY && val->u.array.count == 6,
-        "Failed to parse value array");
-    TEST_ASSERT(val->u.array.elements[0]->u.number == 0.0, "Value 0 mismatch");
-    TEST_ASSERT(val->u.array.elements[1]->u.number == -1.0,
-                "Value -1 mismatch");
-    TEST_ASSERT(fabs(val->u.array.elements[2]->u.number - 3.14) < 0.0001,
-                "Value 3.14 mismatch");
-    TEST_ASSERT(val->u.array.elements[3]->u.boolean == true,
-                "Value true mismatch");
-    TEST_ASSERT(val->u.array.elements[4]->u.boolean == false,
-                "Value false mismatch");
-    TEST_ASSERT(val->u.array.elements[5]->type == JSON_NULL,
-                "Value null mismatch");
+    JSON_ASSERT_ARRAY(val, 6, "Failed to parse value array");
+    JSON_ASSERT_NUMBER(val->u.array.elements[0], 0.0, "Value 0 mismatch");
+    JSON_ASSERT_NUMBER(val->u.array.elements[1], -1.0, "Value -1 mismatch");
+    JSON_ASSERT_NUMBER(val->u.array.elements[2], 3.14, "Value 3.14 mismatch");
+    JSON_ASSERT_BOOL(val->u.array.elements[3], true, "Value true mismatch");
+    JSON_ASSERT_BOOL(val->u.array.elements[4], false, "Value false mismatch");
+    JSON_ASSERT_NULL(val->u.array.elements[5], "Value null mismatch");
 
     free_arena(a);
     return 1;
+
+assert_failed:
+    free_arena(a);
+    return 0;
 }
 
 int main() {

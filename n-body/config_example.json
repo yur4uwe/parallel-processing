@@ -1,0 +1,23 @@
+{
+   "physics": {
+     "particles": 10000,
+     "steps": 5000,
+     "dt": 0.01,
+     "G": 6.674e-11,
+     "softening": 0.1
+   },
+   "initial_state": {
+     "mass_min": 1.0,
+     "mass_max": 10.0,
+     "box_size": 500.0,
+     "velocity_scale": 1.5
+   },
+   "compute": {
+     "mode": "serial",
+     "threads_per_block": 256
+   },
+   "io": {
+     "output_file": "simulation.bin",
+     "stride": 10,
+     "compression": true
+   }
