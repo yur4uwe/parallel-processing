@@ -20,7 +20,10 @@ typedef struct {
     } physics;
     struct {
         char* input_file; // should be null for random generation
+        int mass_distribution;
+        uint32_t seed;
         double mass_min;
+        double alpha;
         double mass_max;
         double box_size;
         double velocity_scale;

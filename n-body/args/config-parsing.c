@@ -1,4 +1,3 @@
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +6,7 @@
 #include "../arena/arena.h"
 #include "../json/json.h"
 #include "config-parsing.h"
+#include "../world/world.h"
 
 // Helper to get an object member by key
 static json_value* get_obj_member(json_value* obj, const char* key) {
@@ -84,12 +84,17 @@ int parse_config(char* file_name, nbody_config* config) {
     // initial_state section
     json_value* initial_state = get_obj_member(json, "initial_state");
     JSON_ASSERT_OBJECT(
-        initial_state, 4,
+        initial_state, 7,
         "Missing 'initial_state' section or incorrect member count");
+
+    json_value* seed = get_obj_member(initial_state, "seed");
+    JSON_ASSERT_TYPE(seed, JSON_NUMBER, "initial_state.seed must be a number");
+    config->initial_state.seed = seed->u.number;
 
     json_value* mass_min = get_obj_member(initial_state, "mass_min");
     JSON_ASSERT_TYPE(mass_min, JSON_NUMBER,
                      "initial_state.mass_min must be a number");
+    JSON_ASSERT(mass_min->u.number > 0.0, "initial_state.mass_min must be > 0");
     config->initial_state.mass_min = mass_min->u.number;
 
     json_value* mass_max = get_obj_member(initial_state, "mass_max");
@@ -97,15 +102,39 @@ int parse_config(char* file_name, nbody_config* config) {
                      "initial_state.mass_max must be a number");
     config->initial_state.mass_max = mass_max->u.number;
 
+    json_value* mass_distribution = get_obj_member(initial_state, "mass_distribution");
+    JSON_ASSERT_TYPE(mass_distribution, JSON_STRING,
+                     "initial_state.mass_distribution must be a string");
+    if (strcmp((char*)mass_distribution->u.string, "uniform") == 0) {
+        config->initial_state.mass_distribution = UNIFORM_MASS_DISTRIBUTION;
+    } else if (strcmp((char*)mass_distribution->u.string, "gaussian") == 0) {
+        config->initial_state.mass_distribution = GAUSSIAN_MASS_DISTRIBUTION;
+    } else if (strcmp((char*)mass_distribution->u.string, "power_law") == 0) {
+        config->initial_state.mass_distribution = POWER_LAW_MASS_DISTRIBUTION;
+    } else {
+        printf("Invalid mass distribution type: %s\n",
+               (char*)mass_distribution->u.string);
+        ec = EXIT_FAILURE;
+        goto assert_failed;
+    }
+
+    json_value* alpha = get_obj_member(initial_state, "alpha");
+    JSON_ASSERT_TYPE(alpha, JSON_NUMBER, "initial_state.alpha must be a number");
+    JSON_ASSERT(alpha->u.number > 0.0, "initial_state.alpha must be > 0");
+    config->initial_state.alpha = alpha->u.number;
+
     json_value* box_size = get_obj_member(initial_state, "box_size");
     JSON_ASSERT_TYPE(box_size, JSON_NUMBER,
                      "initial_state.box_size must be a number");
+    JSON_ASSERT(box_size->u.number > 0.0, "initial_state.box_size must be > 0");
     config->initial_state.box_size = box_size->u.number;
 
     json_value* velocity_scale =
         get_obj_member(initial_state, "velocity_scale");
     JSON_ASSERT_TYPE(velocity_scale, JSON_NUMBER,
                      "initial_state.velocity_scale must be a number");
+    JSON_ASSERT(velocity_scale->u.number > 0.0 && velocity_scale->u.number < 1.0,
+                "initial_state.velocity_scale must be between 0 and 1");
     config->initial_state.velocity_scale = velocity_scale->u.number;
 
     // compute section
@@ -124,6 +153,7 @@ int parse_config(char* file_name, nbody_config* config) {
     json_value* threads = get_obj_member(compute, "threads_per_block");
     JSON_ASSERT_TYPE(threads, JSON_NUMBER,
                      "compute.threads_per_block must be a number");
+    JSON_ASSERT(threads->u.number > 0.0, "compute.threads_per_block must be > 0");
     config->compute.threads_per_block = (uint16_t)threads->u.number;
 
     // io section
@@ -137,6 +167,7 @@ int parse_config(char* file_name, nbody_config* config) {
 
     json_value* stride = get_obj_member(io, "stride");
     JSON_ASSERT_TYPE(stride, JSON_NUMBER, "io.stride must be a number");
+    JSON_ASSERT(stride->u.number > 0.0, "io.stride must be > 0");
     config->io.stride = (uint16_t)stride->u.number;
 
     json_value* compression = get_obj_member(io, "compression");

@@ -42,14 +42,32 @@
 ### JSON Schema Example
 ```json
 {
-  "particles": 10000,
-  "steps": 10000,
-  "stride": 10,
-  "dt": 0.01,
-  "G": 6.674e-11,
-  "softening": 1e-9,
-  "output": "positions.bin",
-  "compression": true
+   "physics": {
+     "particles": 10000, // number of particles
+     "steps": 5000, // number of steps taken by simulation
+     "dt": 0.01, // time step
+     "G": 6.674e-11, // gravitational constant
+     "softening": 0.1 // softening parameter to avoid division by zero
+   },
+   "initial_state": {
+     "seed": 0, // random seed for initial state 0 = random
+     "mass_min": 1.0, // minimum mass of particles
+     "mass_max": 10.0, // maximum mass of particles
+     "mass_distribution": "uniform", // mass distribution type
+     "alpha": 1.0, // power law exponent
+     "box_size": 500.0, // size of simulation box
+     "velocity_scale": 0.05 // scale for initial velocity relative to box size 
+     // (for this example particle can at most cross 5% of the box in a step)
+   },
+   "compute": {
+     "mode": "serial", // serial or CUDA
+     "threads_per_block": 256 // threads per block for CUDA
+   },
+   "io": {
+     "output_file": "simulation.bin", // output file path
+     "stride": 10, // write every Nth step to file
+     "compression": true // enable compression
+   }
 }
 ```
 

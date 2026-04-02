@@ -18,18 +18,18 @@ enum {
     LOOKING_FOR_COLON = 3,
 };
 
-json_value* parse_array(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_array(Arena* a, uint8_t* json_str, size_t* pos,
                         uint64_t str_len);
-json_value* parse_object(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_object(Arena* a, uint8_t* json_str, size_t* pos,
                          uint64_t str_len);
 
-void skip_whitespace(uint8_t* json_str, size_t* pos) {
+static void skip_whitespace(uint8_t* json_str, size_t* pos) {
     while (isspace(json_str[*pos])) {
         (*pos)++;
     }
 }
 
-int is_escapeable(uint8_t ch) {
+static int is_escapeable(uint8_t ch) {
     switch (ch) {
         case '\\':
         case 'n':
@@ -44,7 +44,7 @@ int is_escapeable(uint8_t ch) {
     };
 }
 
-json_value* parse_string(Arena* a, uint8_t* json_str, size_t* pos) {
+static json_value* parse_string(Arena* a, uint8_t* json_str, size_t* pos) {
     (*pos)++;  // skip '"'
     int strlen = 0;
     while (json_str[*pos] != '"') {
@@ -77,7 +77,7 @@ json_value* parse_string(Arena* a, uint8_t* json_str, size_t* pos) {
     return v;
 }
 
-json_value* parse_constant(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_constant(Arena* a, uint8_t* json_str, size_t* pos,
                            char* expected_constant, int exp_const_len) {
     uint8_t constant[7];  // to fit "false\0"
     strncpy((char*)constant, (char*)(&json_str[*pos]), exp_const_len);
@@ -106,7 +106,7 @@ json_value* parse_constant(Arena* a, uint8_t* json_str, size_t* pos,
     return NULL;
 }
 
-json_value* parse_number(Arena* a, uint8_t* json_str, size_t* pos) {
+static json_value* parse_number(Arena* a, uint8_t* json_str, size_t* pos) {
     errno = 0;
     char* endptr = NULL;
     double res = strtod((char*)(&json_str[*pos]), &endptr);
@@ -129,7 +129,7 @@ json_value* parse_number(Arena* a, uint8_t* json_str, size_t* pos) {
     return v;
 }
 
-json_value* parse_value(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_value(Arena* a, uint8_t* json_str, size_t* pos,
                         uint64_t file_size) {
     if (isdigit(json_str[*pos]) || json_str[*pos] == '-') {
         return parse_number(a, json_str, pos);
@@ -155,9 +155,9 @@ json_value* parse_value(Arena* a, uint8_t* json_str, size_t* pos,
     }
 }
 
-void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len);
+static void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len);
 
-void skip_json_string(uint8_t* json_str, size_t* pos, uint64_t str_len) {
+static void skip_json_string(uint8_t* json_str, size_t* pos, uint64_t str_len) {
     (*pos)++;  // skip opening quote
     while (*pos < str_len && json_str[*pos] != '"') {
         if (json_str[*pos] == '\\') {
@@ -168,7 +168,7 @@ void skip_json_string(uint8_t* json_str, size_t* pos, uint64_t str_len) {
     if (*pos < str_len) (*pos)++;  // skip closing quote
 }
 
-void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
+static void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
     skip_whitespace(json_str, pos);
     if (*pos >= str_len) return;
 
@@ -222,7 +222,7 @@ void skip_json_value(uint8_t* json_str, size_t* pos, uint64_t str_len) {
     }
 }
 
-int count_object_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
+static int count_object_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
     if (json_str[pos] != '{') return 0;
     pos++;
     skip_whitespace(json_str, &pos);
@@ -242,7 +242,7 @@ int count_object_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
     return count;
 }
 
-int count_array_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
+static int count_array_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
     if (json_str[pos] != '[') return 0;
     pos++;
     skip_whitespace(json_str, &pos);
@@ -259,7 +259,7 @@ int count_array_elements(uint8_t* json_str, size_t pos, uint64_t str_len) {
     return count;
 }
 
-json_value* parse_object(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_object(Arena* a, uint8_t* json_str, size_t* pos,
                          uint64_t str_len) {
     int total_count = count_object_elements(json_str, *pos, str_len);
     (*pos)++;  // will skip '{'
@@ -343,7 +343,7 @@ parse_enter:
     goto parse_enter;
 }
 
-json_value* parse_array(Arena* a, uint8_t* json_str, size_t* pos,
+static json_value* parse_array(Arena* a, uint8_t* json_str, size_t* pos,
                         uint64_t str_len) {
     int total_count = count_array_elements(json_str, *pos, str_len);
     (*pos)++;  // will skip '['
