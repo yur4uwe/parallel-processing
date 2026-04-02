@@ -3,7 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../args/config-parsing.h"
+// Forward declaration to avoid circular dependency
+struct nbody_config;
 
 enum {
     UNIFORM_MASS_DISTRIBUTION = (int)0,
@@ -31,7 +32,7 @@ typedef struct {
 world* create_world(uint32_t count, world_bounds wb);
 void free_world(world* w);
 
-void random_initial_state(world* w, nbody_config* conf);
+void random_initial_state(world* w, struct nbody_config* conf);
 
 void snapshot_world(world* w, FILE* fp);
 void load_world_snapshot(world* w, FILE* fp);

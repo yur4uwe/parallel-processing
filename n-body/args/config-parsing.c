@@ -84,8 +84,24 @@ int parse_config(char* file_name, nbody_config* config) {
     // initial_state section
     json_value* initial_state = get_obj_member(json, "initial_state");
     JSON_ASSERT_OBJECT(
-        initial_state, 7,
+        initial_state, 8,
         "Missing 'initial_state' section or incorrect member count");
+
+    json_value* type_val = get_obj_member(initial_state, "type");
+    JSON_ASSERT_TYPE(type_val, JSON_STRING, "initial_state.type must be a string");
+    if (strcmp((char*)type_val->u.string, "random") == 0) {
+        config->initial_state.type = PRESET_RANDOM;
+    } else if (strcmp((char*)type_val->u.string, "spiral") == 0) {
+        config->initial_state.type = PRESET_SPIRAL;
+    } else if (strcmp((char*)type_val->u.string, "collision") == 0) {
+        config->initial_state.type = PRESET_COLLISION;
+    } else if (strcmp((char*)type_val->u.string, "orbit") == 0) {
+        config->initial_state.type = PRESET_ORBIT;
+    } else {
+        printf("Invalid preset type: %s\n", (char*)type_val->u.string);
+        ec = EXIT_FAILURE;
+        goto assert_failed;
+    }
 
     json_value* seed = get_obj_member(initial_state, "seed");
     JSON_ASSERT_TYPE(seed, JSON_NUMBER, "initial_state.seed must be a number");
@@ -107,7 +123,8 @@ int parse_config(char* file_name, nbody_config* config) {
                      "initial_state.mass_distribution must be a string");
     if (strcmp((char*)mass_distribution->u.string, "uniform") == 0) {
         config->initial_state.mass_distribution = UNIFORM_MASS_DISTRIBUTION;
-    } else if (strcmp((char*)mass_distribution->u.string, "gaussian") == 0) {
+    } else if (strcmp((char*)mass_distribution->u.string, "gaussian") == 0 ||
+               strcmp((char*)mass_distribution->u.string, "normal") == 0) {
         config->initial_state.mass_distribution = GAUSSIAN_MASS_DISTRIBUTION;
     } else if (strcmp((char*)mass_distribution->u.string, "power_law") == 0) {
         config->initial_state.mass_distribution = POWER_LAW_MASS_DISTRIBUTION;
@@ -133,8 +150,8 @@ int parse_config(char* file_name, nbody_config* config) {
         get_obj_member(initial_state, "velocity_scale");
     JSON_ASSERT_TYPE(velocity_scale, JSON_NUMBER,
                      "initial_state.velocity_scale must be a number");
-    JSON_ASSERT(velocity_scale->u.number > 0.0 && velocity_scale->u.number < 1.0,
-                "initial_state.velocity_scale must be between 0 and 1");
+    JSON_ASSERT(velocity_scale->u.number > 0.0,
+                "initial_state.velocity_scale must be positive");
     config->initial_state.velocity_scale = velocity_scale->u.number;
 
     // compute section

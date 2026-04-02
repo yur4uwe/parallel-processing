@@ -10,7 +10,14 @@ enum {
     CUDA_MODE = (mode)1,
 };
 
-typedef struct {
+typedef enum {
+    PRESET_RANDOM = 0,
+    PRESET_SPIRAL = 1,
+    PRESET_COLLISION = 2,
+    PRESET_ORBIT = 3
+} preset_type;
+
+typedef struct nbody_config {
     struct {
         uint32_t particles;
         uint32_t steps;
@@ -19,6 +26,7 @@ typedef struct {
         double softening;
     } physics;
     struct {
+        preset_type type;
         char* input_file; // should be null for random generation
         int mass_distribution;
         uint32_t seed;

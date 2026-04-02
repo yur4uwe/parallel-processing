@@ -135,18 +135,14 @@ def visualize(filename: str, interval: int = 30):
 
     scatter = ax.scatter([], [], s=1, c="white", alpha=0.6)
     
-    # Text for frame counter
-    frame_text = ax.text(0.02, 0.95, '', transform=ax.transAxes, color='white', fontsize=12)
+    # Text for frame counter (placed at the bottom center of the figure)
+    frame_text = fig.text(0.5, 0.05, '', color='white', fontsize=10, ha='center')
 
     def init():
         scatter.set_offsets(np.empty((0, 2)))
         frame_text.set_text('')
-        return scatter, frame_text
 
     def update(frame):
-        if frame == 0:
-            print("Animation started.")
-        
         x, y = snapshots[frame]
         data = np.column_stack((x, y))
         scatter.set_offsets(data)
@@ -155,18 +151,14 @@ def visualize(filename: str, interval: int = 30):
         current_frame = frame + 1
         total_frames = len(snapshots)
         frame_text.set_text(f"Snapshot: {current_frame}/{total_frames}")
-        
-        if current_frame == total_frames:
-            print("Animation reached the end.")
-            
-        return scatter, frame_text
 
     ani = animation.FuncAnimation(
-        fig, update, frames=len(snapshots), init_func=init, blit=True, interval=interval, repeat=False
+        fig, update, frames=len(snapshots), init_func=init, blit=False, interval=interval, repeat=True
     )
 
-    plt.title(f"N-Body Simulation: {header['count']} particles", color="white", pad=-20)
+    plt.title(f"N-Body Simulation: {header['count']} particles", color="white")
     fig.patch.set_facecolor("black")
+    plt.tight_layout(rect=[0, 0.08, 1, 0.95]) # Make room for text at bottom and title at top
     plt.show()
 
 

@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../world/world.h"
+#include "simulation.h"
 
 
 void compute_forces(world* w, float* accel_x, float* accel_y, float G, float softening) {
