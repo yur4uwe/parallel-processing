@@ -27,8 +27,7 @@
 - Each thread computes force on one particle from all others.
 
 ### Integration Method
-- **Euler integration** — simplest, sufficient for uni project scope.
-- Leapfrog is an alternative if better energy conservation is needed.
+- **Leapfrog integration** — provides better energy conservation than Euler, used as the default.
 
 ---
 
@@ -50,6 +49,7 @@
      "softening": 0.1 // softening parameter to avoid division by zero
    },
    "initial_state": {
+     "type": "random", // "random", "orbit", "collision"
      "seed": 0, // random seed for initial state 0 = random
      "mass_min": 1.0, // minimum mass of particles
      "mass_max": 10.0, // maximum mass of particles

@@ -15,6 +15,7 @@ Usage: $0 [COMMAND]
 
 Commands:
     serial        Build serial n-body simulation
+    cuda          Build CUDA parallel n-body simulation (requires NVCC)
     json-runner   Build json runner utility only
     test          Build and run json tests
     clean         Remove build artifacts
@@ -24,11 +25,26 @@ EOF
 
 build_serial() {
     echo "Building serial n-body simulation..."
-    if gcc $CFLAGS smain.c args/config-parsing.c arena/arena.c json/json.c simulation/simulation.c world/world.c world/initial_state.c -o "$BUILD_DIR/nbody-serial" -lm; then
+    if gcc $CFLAGS main.c args/config-parsing.c arena/arena.c json/json.c simulation/simulation.c world/world.c world/initial_state.c -o "$BUILD_DIR/nbody-serial" -lm; then
         echo "Successfully built $BUILD_DIR/nbody-serial"
         return 0
     else
         echo "Failed to build serial simulation"
+        return 1
+    fi
+}
+
+build_cuda() {
+    echo "Building CUDA n-body simulation..."
+    # -arch=sm_75 targets Turing architecture (GTX 1660)
+    # nvcc handles both .c and .cu files
+    # host compiler flags must be wrapped with -Xcompiler
+    XFLAGS="-Xcompiler $(echo $CFLAGS | sed 's/ /,/g')"
+    if nvcc $XFLAGS -arch=sm_75 main.c args/config-parsing.c arena/arena.c json/json.c simulation/simulation.cu world/world.c world/initial_state.c -o "$BUILD_DIR/nbody-cuda" -lm; then
+        echo "Successfully built $BUILD_DIR/nbody-cuda"
+        return 0
+    else
+        echo "Failed to build CUDA simulation"
         return 1
     fi
 }
@@ -64,6 +80,10 @@ case "$1" in
         ;;
     serial)
         build_serial
+        exit $?
+        ;;
+    cuda)
+        build_cuda
         exit $?
         ;;
     test)

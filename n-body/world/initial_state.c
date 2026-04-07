@@ -50,39 +50,23 @@ float get_mass(uint32_t* rng_state, nbody_config* conf) {
     return 1.0f;
 }
 
-void init_spiral(world* w, nbody_config* conf, uint32_t* rng_state, 
+void init_cluster(world* w, nbody_config* conf, uint32_t* rng_state, 
                  uint32_t start_idx, uint32_t count, 
                  float offset_x, float offset_y, 
                  float v_offset_x, float v_offset_y,
                  float v_base) {
-    float radius_max = conf->initial_state.box_size * 0.45f;
-    float G = conf->physics.G;
-    float softening = conf->physics.softening;
+    float radius_max = conf->initial_state.box_size * 0.15f;
     
-    // Balanced Orbit Physics:
-    // With 1/r density distribution (uniform r), gravity scales as 1/r.
-    // Circular orbit: v^2/r = G*M(r)/r^2  => v^2 = G*M(r)/r = constant.
-    // Total Mass M = v_base^2 * R / G
-    float required_gm = v_base * v_base * radius_max;
-    float current_avg_mass = (conf->initial_state.mass_max + conf->initial_state.mass_min) * 0.5f;
-    float current_gm = G * current_avg_mass * count;
-    float mass_multiplier = required_gm / (current_gm + 1e-9f);
-
+    // Simple orbiting cluster
     for (uint32_t i = start_idx; i < start_idx + count; i++) {
-        float r = random_number(rng_state, radius_max * 0.01f, radius_max);
+        float r = random_number(rng_state, 0.0f, radius_max);
         float angle = random_number(rng_state, 0.0f, 2.0f * M_PI);
         
         w->x[i] = offset_x + r * cos(angle);
         w->y[i] = offset_y + r * sin(angle);
-        w->m[i] = get_mass(rng_state, conf) * mass_multiplier;
+        w->m[i] = get_mass(rng_state, conf);
         
-        // FLAT ROTATION PROFILE with Softened Core:
-        // Gravity in the softened core (r < softening) becomes linear.
-        // We ramp the velocity linearly in that region to maintain stability.
-        float v_mag = v_base;
-        if (r < softening * 2.0f) {
-            v_mag *= (r / (softening * 2.0f));
-        }
+        float v_mag = v_base * sqrtf(radius_max / (r + conf->physics.softening));
         
         w->vx[i] = v_offset_x - v_mag * sin(angle);
         w->vy[i] = v_offset_y + v_mag * cos(angle);
@@ -120,41 +104,45 @@ void random_initial_state(world* w, nbody_config* conf) {
             }
             break;
         }
-        case PRESET_SPIRAL: {
-            init_spiral(w, conf, &rng_state, 0, w->count, cx, cy, 0, 0, v_base);
-            break;
-        }
         case PRESET_COLLISION: {
             uint32_t half = w->count / 2;
             float dist = conf->initial_state.box_size * 0.25f;
-            float v_approach = v_base * 0.15f; 
+            float v_approach = v_base * 0.5f; 
             
-            init_spiral(w, conf, &rng_state, 0, half, cx - dist, cy, v_approach, 0, v_base);
-            init_spiral(w, conf, &rng_state, half, w->count - half, cx + dist, cy, -v_approach, 0, v_base);
+            init_cluster(w, conf, &rng_state, 0, half, cx - dist, cy, v_approach, 0, v_base);
+            init_cluster(w, conf, &rng_state, half, w->count - half, cx + dist, cy, -v_approach, 0, v_base);
             break;
         }
         case PRESET_ORBIT: {
+            float G = conf->physics.G;
+            float radius_max = conf->initial_state.box_size * 0.45f;
+            
+            // Set a very heavy central mass at index 0
             w->x[0] = cx;
             w->y[0] = cy;
             w->vx[0] = 0;
             w->vy[0] = 0;
             
-            float G = conf->physics.G;
-            float radius_max = conf->initial_state.box_size * 0.45f;
-            float r_avg = radius_max * 0.5f;
-            
-            w->m[0] = (v_base * v_base * r_avg) / G;
+            // Central mass should be much larger than the sum of all other masses to be stable
+            // We'll base it on the target v_base at the outer edge
+            // v = sqrt(G * M / r) => M = v^2 * r / G
+            float m_center = (v_base * v_base * radius_max) / G;
+            w->m[0] = m_center;
             
             for (uint32_t i = 1; i < w->count; i++) {
-                float r = random_number(&rng_state, radius_max * 0.1f, radius_max);
+                // Distribute particles in a disk
+                float r = random_number(&rng_state, radius_max * 0.05f, radius_max);
                 float angle = random_number(&rng_state, 0.0f, 2.0f * M_PI);
                 
                 w->x[i] = cx + r * cos(angle);
                 w->y[i] = cy + r * sin(angle);
                 w->m[i] = get_mass(&rng_state, conf);
                 
-                float v_mag = v_base * sqrtf(r_avg / (r + conf->physics.softening));
+                // Orbital velocity: v = sqrt(G * M_enclosed / r)
+                // We use m_center as a simplifying assumption (dominant mass)
+                float v_mag = sqrtf(G * m_center / r);
                 
+                // Velocity vector is perpendicular to the position vector (pointing counter-clockwise)
                 w->vx[i] = -v_mag * sin(angle);
                 w->vy[i] = v_mag * cos(angle);
             }

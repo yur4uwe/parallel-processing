@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -12,10 +16,10 @@ enum {
 
 typedef enum {
     PRESET_RANDOM = 0,
-    PRESET_SPIRAL = 1,
     PRESET_COLLISION = 2,
     PRESET_ORBIT = 3
-} preset_type;
+} initial_state_type;
+
 
 typedef struct nbody_config {
     struct {
@@ -26,7 +30,7 @@ typedef struct nbody_config {
         double softening;
     } physics;
     struct {
-        preset_type type;
+        initial_state_type type;
         char* input_file; // should be null for random generation
         int mass_distribution;
         uint32_t seed;
@@ -48,3 +52,7 @@ typedef struct nbody_config {
 } nbody_config;
 
 int parse_config(char* file_name, nbody_config* config);
+
+#ifdef __cplusplus
+}
+#endif

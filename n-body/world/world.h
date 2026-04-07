@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 
@@ -41,3 +45,7 @@ void read_world_header(world* w, uint32_t* num_snapshots, FILE* fp);
 
 void save_world_state(world* w, FILE* fp);
 void load_world_state(world* w, FILE* fp);
+
+#ifdef __cplusplus
+}
+#endif

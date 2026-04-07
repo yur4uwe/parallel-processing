@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "args/config-parsing.h"
 #include "world/world.h"
@@ -32,8 +33,19 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
     simulate(w, conf, fp);
 
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    
+    printf("Simulation completed in %.6f seconds\n", elapsed);
+    printf("Performance: %.2f steps/sec\n", conf->physics.steps / elapsed);
+
+    fclose(fp);
+    free_world(w);
     free(conf);
     return EXIT_SUCCESS;
 }

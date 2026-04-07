@@ -42,7 +42,7 @@ int parse_config(char* file_name, nbody_config* config) {
         goto cleanup;
     }
 
-    a = new_arena(100 * 1024);
+    a = new_arena(file_size * 7);
 
     json_value* json = parse_json(a, json_str, file_size);
     if (json == NULL) {
@@ -91,17 +91,16 @@ int parse_config(char* file_name, nbody_config* config) {
     JSON_ASSERT_TYPE(type_val, JSON_STRING, "initial_state.type must be a string");
     if (strcmp((char*)type_val->u.string, "random") == 0) {
         config->initial_state.type = PRESET_RANDOM;
-    } else if (strcmp((char*)type_val->u.string, "spiral") == 0) {
-        config->initial_state.type = PRESET_SPIRAL;
     } else if (strcmp((char*)type_val->u.string, "collision") == 0) {
         config->initial_state.type = PRESET_COLLISION;
     } else if (strcmp((char*)type_val->u.string, "orbit") == 0) {
         config->initial_state.type = PRESET_ORBIT;
     } else {
-        printf("Invalid preset type: %s\n", (char*)type_val->u.string);
+        printf("[ERROR] unknown preset: %s\n", (char*)type_val->u.string);
         ec = EXIT_FAILURE;
         goto assert_failed;
     }
+
 
     json_value* seed = get_obj_member(initial_state, "seed");
     JSON_ASSERT_TYPE(seed, JSON_NUMBER, "initial_state.seed must be a number");
