@@ -91,7 +91,7 @@ def verify_file_structure(filename):
     return True
 
 
-def visualize(filename: str, interval: int = 30):
+def visualize(filename: str, interval: int = 30, save_video: bool = False):
     if not os.path.exists(filename):
         print(f"Error: File {filename} not found.")
         return
@@ -141,6 +141,7 @@ def visualize(filename: str, interval: int = 30):
     def init():
         scatter.set_offsets(np.empty((0, 2)))
         frame_text.set_text('')
+        return scatter, frame_text
 
     def update(frame):
         x, y = snapshots[frame]
@@ -151,27 +152,47 @@ def visualize(filename: str, interval: int = 30):
         current_frame = frame + 1
         total_frames = len(snapshots)
         frame_text.set_text(f"Snapshot: {current_frame}/{total_frames}")
+        return scatter, frame_text
 
     ani = animation.FuncAnimation(
-        fig, update, frames=len(snapshots), init_func=init, blit=False, interval=interval, repeat=True
+        fig, update, frames=len(snapshots), init_func=init, blit=True, interval=interval, repeat=True
     )
 
     plt.title(f"N-Body Simulation: {header['count']} particles", color="white")
     fig.patch.set_facecolor("black")
     plt.tight_layout(rect=[0, 0.08, 1, 0.95]) # Make room for text at bottom and title at top
-    plt.show()
+    
+    if save_video:
+        output_name = filename.replace(".bin", ".mp4")
+        print(f"Saving animation to {output_name}...")
+        try:
+            # Use 30 FPS for smooth playback
+            writer = animation.FFMpegWriter(fps=30, bitrate=2000)
+            ani.save(output_name, writer=writer)
+            print(f"Video saved successfully: {output_name}")
+        except Exception as e:
+            print(f"Error saving video: {e}")
+            print("Ensure ffmpeg is installed: 'sudo apt install ffmpeg'")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python visualize.py <simulation_output.bin> [interval_ms]")
-        print("Example: python visualize.py simulation.bin 50")
+        print("Usage: python visualize.py <simulation_output.bin> [interval_ms] [--save]")
+        print("Example: python visualize.py simulation.bin 50 --save")
     else:
+        filename = sys.argv[1]
         interval = 30
-        if len(sys.argv) > 2:
-            try:
-                interval = int(sys.argv[2])
-            except ValueError:
-                print(f"Invalid interval: {sys.argv[2]}, using default 30ms")
+        save_video = "--save" in sys.argv
         
-        visualize(sys.argv[1], interval)
+        # Try to find interval in arguments that are not the filename or --save
+        for arg in sys.argv[2:]:
+            if arg != "--save":
+                try:
+                    interval = int(arg)
+                    break
+                except ValueError:
+                    continue
+        
+        visualize(filename, interval, save_video)
