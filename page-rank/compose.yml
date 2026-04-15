@@ -1,0 +1,75 @@
+services:
+  namenode:
+    image: apache/hadoop:3
+    container_name: namenode
+    hostname: namenode
+    user: root
+    ports:
+      - "9870:9870"   # HDFS web UI
+      - "8020:8020"   # HDFS RPC port
+    environment:
+      ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./data/namenode:/tmp/hadoop-root/dfs/name   # HDFS metadata
+      - ./config:/opt/hadoop/etc/hadoop             # Hadoop config XMLs
+      - ./bin:/opt/binaries                    # your Go binaries
+    command: ["hdfs", "namenode"]
+    networks:
+      - hadoop
+
+  datanode:
+    image: apache/hadoop:3
+    container_name: datanode
+    hostname: datanode
+    user: root
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./data/datanode:/tmp/hadoop-root/dfs/data   # actual HDFS data blocks
+      - ./config:/opt/hadoop/etc/hadoop             # same config as namenode
+      - ./bin:/opt/binaries                    # your Go binaries
+    command: ["hdfs", "datanode"]
+    depends_on:
+      - namenode
+    networks:
+      - hadoop
+
+  resourcemanager:
+    image: apache/hadoop:3
+    container_name: resourcemanager
+    hostname: resourcemanager
+    user: root
+    ports:
+      - "8088:8088"   # YARN web UI
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./config:/opt/hadoop/etc/hadoop
+      - ./bin:/opt/binaries
+    command: ["yarn", "resourcemanager"]
+    depends_on:
+      - namenode
+    networks:
+      - hadoop
+
+  nodemanager:
+    image: apache/hadoop:3
+    container_name: nodemanager
+    hostname: nodemanager
+    user: root
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./config:/opt/hadoop/etc/hadoop
+      - ./bin:/opt/binaries
+    command: ["yarn", "nodemanager"]
+    depends_on:
+      - resourcemanager
+    networks:
+      - hadoop
+
+networks:
+  hadoop:
+    driver: bridge
