@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"page-rank/format"
 	"page-rank/graph"
-	"strconv"
 	"strings"
 )
 
@@ -17,24 +17,10 @@ func main() {
 			continue
 		}
 
-		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
+		node, err := format.ParseLine(line, '\t')
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
 			continue
-		}
-
-		nodeID := graph.NodeID(parts[0])
-		rank, _ := strconv.ParseFloat(parts[1], 64)
-		var links []graph.NodeID
-		if len(parts) > 2 && parts[2] != "" {
-			for l := range strings.SplitSeq(parts[2], ",") {
-				links = append(links, graph.NodeID(strings.TrimSpace(l)))
-			}
-		}
-
-		node := &graph.Node{
-			ID:       nodeID,
-			Rank:     rank,
-			OutLinks: links,
 		}
 
 		// 1. Pass Structure

@@ -27,7 +27,7 @@ func main() {
 	currentInput := *input
 	var danglingMass float64
 
-	for i := 1; i <= *maxIter; i++ {
+	for i := range *maxIter {
 		currentOutput := fmt.Sprintf("%s_iter%d", *outputBase, i)
 		fmt.Printf("--- Iteration %d (Dangling Mass: %.6f) ---\n", i, danglingMass)
 
@@ -68,7 +68,7 @@ func runHadoopJob(jar string, mapper, reducer *string, input, output string, dam
 	cmd := exec.Command("hadoop", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	fmt.Printf("Executing: hadoop %s\n", strings.Join(args, " "))
 	return cmd.Run()
 }
@@ -107,7 +107,7 @@ func getRanks(path string) (map[string]float64, float64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	if err := cmd.Start(); err != nil {
 		return nil, 0, err
 	}
@@ -127,7 +127,7 @@ func getRanks(path string) (map[string]float64, float64, error) {
 			}
 		}
 	}
-	
+
 	cmd.Wait()
 	return ranks, dangling, nil
 }

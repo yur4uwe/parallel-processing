@@ -1,3 +1,6 @@
 data/
 data/namenode/
 data/datanode/
+tmp/
+perf/
+logs/
