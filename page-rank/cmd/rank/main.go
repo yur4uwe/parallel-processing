@@ -63,7 +63,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Converged in %d iterations\n", result.Iterations)
+	fmt.Printf("Converged after %d iterations\n", result.Iterations)
 	fmt.Println("Top 10 Nodes:")
 
 	type pair struct {
@@ -79,7 +79,6 @@ func main() {
 		return sorted[i].Rank > sorted[j].Rank
 	})
 
-	fmt.Printf("Converged in %d iterations\n", result.Iterations)
 	for i := 0; i < len(sorted) && i < 10; i++ {
 		fmt.Printf("%d. %s: %.6f\n", i+1, sorted[i].ID, sorted[i].Rank)
 	}

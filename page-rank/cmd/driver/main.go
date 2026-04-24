@@ -103,6 +103,11 @@ func calculateDiffAndDangling(oldPath, newPath string) (float64, float64, error)
 
 func getRanks(path string) (map[string]float64, float64, error) {
 	cmd := exec.Command("hadoop", "fs", "-cat", path+"/part-*")
+	// If path doesn't contain part-* (like the initial input), just cat the file
+	if !strings.Contains(path, "iter") {
+		cmd = exec.Command("hadoop", "fs", "-cat", path)
+	}
+	
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, 0, err
@@ -116,10 +121,17 @@ func getRanks(path string) (map[string]float64, float64, error) {
 	dangling := 0.0
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		parts := strings.Split(scanner.Text(), "\t")
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
 		if len(parts) >= 2 {
 			id := parts[0]
-			val, _ := strconv.ParseFloat(parts[1], 64)
+			val, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil {
+				continue
+			}
 			if id == "__DANGLING__" {
 				dangling = val
 			} else {
